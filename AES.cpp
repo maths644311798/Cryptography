@@ -6,7 +6,7 @@ const int Nk = 4; the seed has Nk words
 AES-128  Nr=10, Nk = 4
 AES-192  Nr=12, Nk = 6
 AES-256  Nr=14, Nk = 8
-For a 16-byte message "col", regard it as a 4 * 4 matrix. 
+For a 16-byte message "col", regard it as a 4 * 4 matrix.
 The first column consists of col[0], col[1], col[2],col[3]
  */
 #include <cmath>
@@ -38,12 +38,12 @@ public:
 	{
 		byte temp[8] = { a };
 		byte res = 0x00;
-		for (int i = 1; i < 8; ++i) 
+		for (int i = 1; i < 8; ++i)
 		{
 			temp[i] = (temp[i - 1] << 1) ^ ((temp[i - 1] & 0x80) ? 0x1B : 0x00);
 		}
 
-		for (int i = 0; i < 8; ++i) 
+		for (int i = 0; i < 8; ++i)
 		{
 			res ^= ((b >> i) & 0x01) * temp[i];
 		}
@@ -53,7 +53,7 @@ public:
 
 	void SubBytes(byte* col)
 	{
-		for (int x = 0; x < (Nk<<2); x++)
+		for (int x = 0; x < (Nk << 2); x++)
 		{
 			col[x] = S[col[x]];
 		}
@@ -90,7 +90,7 @@ public:
 		byte temp[4];
 		for (int i = 0; i < 4; i++, col += 4)
 		{
-			temp[0] = field_mul(0x02,col[0]) ^ field_mul(0x03, col[1]) ^ col[2] ^ col[3];
+			temp[0] = field_mul(0x02, col[0]) ^ field_mul(0x03, col[1]) ^ col[2] ^ col[3];
 			temp[1] = col[0] ^ field_mul(0x02, col[1]) ^ field_mul(0x03, col[2]) ^ col[3];
 			temp[2] = col[0] ^ col[1] ^ field_mul(0x02, col[2]) ^ field_mul(0x03, col[3]);
 			temp[3] = field_mul(0x03, col[0]) ^ col[1] ^ col[2] ^ field_mul(0x02, col[3]);
@@ -142,7 +142,7 @@ public:
 		}
 
 		i = Nk;
-		while (i < (4 * (Nr + 1))) 
+		while (i < (4 * (Nr + 1)))
 		{
 			for (x = 0; x < 4; x++)
 				temp[x] = outkey[(4 * (i - 1)) + x];
@@ -159,7 +159,7 @@ public:
 				for (x = 0; x < 4; x++)
 				{
 					t = Rcon_copy & 0xFF;
-					temp[x] = temp[x] ^ t;
+					temp[x] ^= t;
 					Rcon_copy = Rcon_copy >> 8;
 				}
 			}
@@ -180,8 +180,8 @@ public:
 		for (unsigned int round = 1; round <= (Nr - 1); round++)
 		{
 			SubBytes(blk);
-			ShiftRows(blk);	
-			MixColumns(blk);	
+			ShiftRows(blk);
+			MixColumns(blk);
 			AddRoundKey(blk, ExtendedKey, round);
 		}
 
@@ -196,7 +196,7 @@ public:
 		AddRoundKey(blk, ExtendedKey, Nr);
 		Inverse_ShiftRows(blk);
 		Inverse_SubBytes(blk);
-		for(unsigned int x = (Nr - 1); x >= 1; x--)
+		for (unsigned int x = (Nr - 1); x >= 1; x--)
 		{
 			AddRoundKey(blk, ExtendedKey, x);
 			Inverse_MixColumns(blk);
@@ -208,7 +208,7 @@ public:
 
 };
 
-const byte AES<10,4>::S[] = {
+const byte AES<10, 4>::S[] = {
 	0x63, 0x7C, 0x77, 0x7B, 0xF2, 0x6B, 0x6F, 0xC5, 0x30, 0x01, 0x67, 0x2B, 0xFE, 0xD7, 0xAB, 0x76,
 	0xCA, 0x82, 0xC9, 0x7D, 0xFA, 0x59, 0x47, 0xF0, 0xAD, 0xD4, 0xA2, 0xAF, 0x9C, 0xA4, 0x72, 0xC0,
 	0xB7, 0xFD, 0x93, 0x26, 0x36, 0x3F, 0xF7, 0xCC, 0x34, 0xA5, 0xE5, 0xF1, 0x71, 0xD8, 0x31, 0x15,
@@ -227,7 +227,7 @@ const byte AES<10,4>::S[] = {
 	0x8C, 0xA1, 0x89, 0x0D, 0xBF, 0xE6, 0x42, 0x68, 0x41, 0x99, 0x2D, 0x0F, 0xB0, 0x54, 0xBB, 0x16
 };
 
-const byte AES<10,4>::inv_S[] = {
+const byte AES<10, 4>::inv_S[] = {
 	0x52, 0x09, 0x6A, 0xD5, 0x30, 0x36, 0xA5, 0x38, 0xBF, 0x40, 0xA3, 0x9E, 0x81, 0xF3, 0xD7, 0xFB,
 	0x7C, 0xE3, 0x39, 0x82, 0x9B, 0x2F, 0xFF, 0x87, 0x34, 0x8E, 0x43, 0x44, 0xC4, 0xDE, 0xE9, 0xCB,
 	0x54, 0x7B, 0x94, 0x32, 0xA6, 0xC2, 0x23, 0x3D, 0xEE, 0x4C, 0x95, 0x0B, 0x42, 0xFA, 0xC3, 0x4E,
@@ -248,16 +248,16 @@ const byte AES<10,4>::inv_S[] = {
 
 const word AES<10, 4>::Rcon[] = {
 		0x0UL,
-		0x01000000UL, 0x02000000UL, 0x04000000UL, 0x08000000UL, 0x10000000UL,
-		0x20000000UL, 0x40000000UL, 0x80000000UL, 0x1B000000UL, 0x36000000UL
+		0x00000001UL, 0x00000002UL, 0x00000004UL, 0x00000008UL, 0x00000010UL,
+		0x00000020UL, 0x00000040UL, 0x00000080UL, 0x0000001BUL, 0x00000036UL
 };
 
 int main()
 {
-	AES<10,4> f;
+	AES<10, 4> f;
 	byte plaintext[17], key[17];
 
-	strcpy((char *)plaintext, "SJTUandFDUbirthd");
+	strcpy((char*)plaintext, "SJTUandFDUbirthd");
 	printf("plaintext is %s\n", plaintext);
 	strcpy((char*)key, "IloveSJTUforever");
 
@@ -266,7 +266,7 @@ int main()
 	printf("ciphertext: ");
 	for (int i = 0; i < 16; i++)
 	{
-		printf("%2x ", plaintext[i]);
+		printf("%02x ", plaintext[i]);
 	}
 	printf("\n");
 	printf("\n");
@@ -275,5 +275,5 @@ int main()
 	f.Decrypt(plaintext, key);
 	printf("The decrypted plaintext is: %s", plaintext);
 
-    return 0;
+	return 0;
 }
