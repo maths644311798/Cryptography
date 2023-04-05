@@ -6,8 +6,16 @@ const int Nk = 4; the seed has Nk words
 AES-128  Nr=10, Nk = 4
 AES-192  Nr=12, Nk = 6
 AES-256  Nr=14, Nk = 8
-For a 16-byte message "col", regard it as a 4 * 4 matrix.
-The first column consists of col[0], col[1], col[2],col[3]
+Their keys have length 128, 192 and 256 bits.
+Their inputs and outputs are 16-byte blocks.
+For a message "state", regard it as a 4 * 4 matrix.
+The first column consists of state[0], ...,state[3]
+Document:
+National Institute of Standards and Technology (2001) Advanced Encryption Standard (AES).
+(Department of Commerce, Washington, D.C.),
+Federal Informa-tion Processing Standards Publication (FIPS)
+NIST FIPS 197-upd1 ipd, updated December 19, 2022.
+https://doi.org/10.6028/NIST.FIPS.197-upd1.ipd
  */
 #include <cmath>
 #include <iostream>
@@ -23,7 +31,7 @@ typedef unsigned long word;
 template <unsigned Nr, unsigned Nk>
 class AES
 {
-public:
+private:
 
 	// S-box
 	static const byte S[256];
@@ -51,85 +59,85 @@ public:
 		return res;
 	}
 
-	void SubBytes(byte* col)
+	void SubBytes(byte* state)
 	{
 		for (int x = 0; x < (Nk << 2); x++)
 		{
-			col[x] = S[col[x]];
+			state[x] = S[state[x]];
 		}
 	}
 
-	void Inverse_SubBytes(byte* col)
+	void Inverse_SubBytes(byte* state)
 	{
 		for (int x = 0; x < (Nk << 2); x++)
 		{
-			col[x] = inv_S[col[x]];
+			state[x] = inv_S[state[x]];
 		}
 	}
 
-	void ShiftRows(byte* col)
+	void ShiftRows(byte* state)
 	{
 		byte t;
-		t = col[1]; col[1] = col[5]; col[5] = col[9]; col[9] = col[13]; col[13] = t;
-		t = col[2]; col[2] = col[10]; col[10] = t;
-		t = col[6]; col[6] = col[14]; col[14] = t;
-		t = col[15]; col[15] = col[11]; col[11] = col[7]; col[7] = col[3]; col[3] = t;
+		t = state[1]; state[1] = state[5]; state[5] = state[9]; state[9] = state[13]; state[13] = t;
+		t = state[2]; state[2] = state[10]; state[10] = t;
+		t = state[6]; state[6] = state[14]; state[14] = t;
+		t = state[15]; state[15] = state[11]; state[11] = state[7]; state[7] = state[3]; state[3] = t;
 	}
 
-	void Inverse_ShiftRows(byte* col)
+	void Inverse_ShiftRows(byte* state)
 	{
 		byte t;
-		t = col[13]; col[13] = col[9]; col[9] = col[5]; col[5] = col[1]; col[1] = t;
-		t = col[2]; col[2] = col[10]; col[10] = t;
-		t = col[6]; col[6] = col[14]; col[14] = t;
-		t = col[3]; col[3] = col[7]; col[7] = col[11]; col[11] = col[15]; col[15] = t;
+		t = state[13]; state[13] = state[9]; state[9] = state[5]; state[5] = state[1]; state[1] = t;
+		t = state[2]; state[2] = state[10]; state[10] = t;
+		t = state[6]; state[6] = state[14]; state[14] = t;
+		t = state[3]; state[3] = state[7]; state[7] = state[11]; state[11] = state[15]; state[15] = t;
 	}
 
-	void MixColumns(byte* col)
+	void MixColumns(byte* state)
 	{
 		byte temp[4];
-		for (int i = 0; i < 4; i++, col += 4)
+		for (int i = 0; i < 4; i++, state += 4)
 		{
-			temp[0] = field_mul(0x02, col[0]) ^ field_mul(0x03, col[1]) ^ col[2] ^ col[3];
-			temp[1] = col[0] ^ field_mul(0x02, col[1]) ^ field_mul(0x03, col[2]) ^ col[3];
-			temp[2] = col[0] ^ col[1] ^ field_mul(0x02, col[2]) ^ field_mul(0x03, col[3]);
-			temp[3] = field_mul(0x03, col[0]) ^ col[1] ^ col[2] ^ field_mul(0x02, col[3]);
-			col[0] = temp[0];
-			col[1] = temp[1];
-			col[2] = temp[2];
-			col[3] = temp[3];
+			temp[0] = field_mul(0x02, state[0]) ^ field_mul(0x03, state[1]) ^ state[2] ^ state[3];
+			temp[1] = state[0] ^ field_mul(0x02, state[1]) ^ field_mul(0x03, state[2]) ^ state[3];
+			temp[2] = state[0] ^ state[1] ^ field_mul(0x02, state[2]) ^ field_mul(0x03, state[3]);
+			temp[3] = field_mul(0x03, state[0]) ^ state[1] ^ state[2] ^ field_mul(0x02, state[3]);
+			state[0] = temp[0];
+			state[1] = temp[1];
+			state[2] = temp[2];
+			state[3] = temp[3];
 		}
 
 	}
 
-	void Inverse_MixColumns(byte* col)
+	void Inverse_MixColumns(byte* state)
 	{
 		byte temp[4];
-		for (int i = 0; i < 4; i++, col += 4)
+		for (int i = 0; i < 4; i++, state += 4)
 		{
-			temp[0] = field_mul(0x0E, col[0]) ^ field_mul(0x0B, col[1]) ^ field_mul(0x0D, col[2]) ^ field_mul(0x09, col[3]);
-			temp[1] = field_mul(0x09, col[0]) ^ field_mul(0x0E, col[1]) ^ field_mul(0x0B, col[2]) ^ field_mul(0x0D, col[3]);
-			temp[2] = field_mul(0x0D, col[0]) ^ field_mul(0x09, col[1]) ^ field_mul(0x0E, col[2]) ^ field_mul(0x0B, col[3]);
-			temp[3] = field_mul(0x0B, col[0]) ^ field_mul(0x0D, col[1]) ^ field_mul(0x09, col[2]) ^ field_mul(0x0E, col[3]);
-			col[0] = temp[0];
-			col[1] = temp[1];
-			col[2] = temp[2];
-			col[3] = temp[3];
+			temp[0] = field_mul(0x0E, state[0]) ^ field_mul(0x0B, state[1]) ^ field_mul(0x0D, state[2]) ^ field_mul(0x09, state[3]);
+			temp[1] = field_mul(0x09, state[0]) ^ field_mul(0x0E, state[1]) ^ field_mul(0x0B, state[2]) ^ field_mul(0x0D, state[3]);
+			temp[2] = field_mul(0x0D, state[0]) ^ field_mul(0x09, state[1]) ^ field_mul(0x0E, state[2]) ^ field_mul(0x0B, state[3]);
+			temp[3] = field_mul(0x0B, state[0]) ^ field_mul(0x0D, state[1]) ^ field_mul(0x09, state[2]) ^ field_mul(0x0E, state[3]);
+			state[0] = temp[0];
+			state[1] = temp[1];
+			state[2] = temp[2];
+			state[3] = temp[3];
 		}
 	}
 
-	void AddRoundKey(byte* col, byte* ExpansionKey, unsigned int round)
+	void AddRoundKey(byte* state, byte* ExpansionKey)
 	{
-		for (int x = 0; x < (Nk << 2); x++)
+		for (int x = 0; x < 16; x++)
 		{
-			col[x] ^= ExpansionKey[round * (Nk << 2) + x];
+			state[x] ^= ExpansionKey[x];
 		}
 	}
 
 public:
-	byte ExtendedKey[(Nr + 2) * Nk * 4];
+	byte ExtendedKey[(Nr + 1) * 16];
 
-	void ExtendKey(const byte* inkey, byte* outkey)
+	void KeyExpansion(const byte* inkey, byte* outkey)
 	{
 		//inkey:16 byte key
 		//outkey：44 word extension key
@@ -152,9 +160,8 @@ public:
 				t = temp[0]; temp[0] = temp[1]; temp[1] = temp[2]; temp[2] = temp[3]; temp[3] = t;
 				/*SubWord()*/
 				for (x = 0; x < 4; x++)
-				{
 					temp[x] = S[temp[x]];
-				}
+
 				word Rcon_copy = Rcon[i / Nk];
 				for (x = 0; x < 4; x++)
 				{
@@ -162,6 +169,11 @@ public:
 					temp[x] ^= t;
 					Rcon_copy = Rcon_copy >> 8;
 				}
+			}
+			else if (Nk > 6 && i % Nk == 4)
+			{
+				for (x = 0; x < 4; x++)
+					temp[x] = S[temp[x]];
 			}
 			for (x = 0; x < 4; x++)
 			{
@@ -171,39 +183,42 @@ public:
 		}
 	}
 
-	void Encrypt(byte* blk, const byte* Key)
+	void Cipher(byte* in, const byte* Key, byte* state)
 	{
+		memcpy(state, in, 16);
+		KeyExpansion(Key, ExtendedKey);
 
-		ExtendKey(Key, ExtendedKey);
-		AddRoundKey(blk, ExtendedKey, 0);
+		AddRoundKey(state, ExtendedKey);
 
 		for (unsigned int round = 1; round <= (Nr - 1); round++)
 		{
-			SubBytes(blk);
-			ShiftRows(blk);
-			MixColumns(blk);
-			AddRoundKey(blk, ExtendedKey, round);
+			SubBytes(state);
+			ShiftRows(state);
+			MixColumns(state);
+			AddRoundKey(state, ExtendedKey + (round << 4));
 		}
 
-		SubBytes(blk);
-		ShiftRows(blk);
-		AddRoundKey(blk, ExtendedKey, Nr);
+		SubBytes(state);
+		ShiftRows(state);
+		AddRoundKey(state, ExtendedKey + (Nr << 4));
 	}
 
-	void Decrypt(byte* blk, byte* Key)
+	void Decipher(byte* in, byte* Key, byte* state)
 	{
-		ExtendKey(Key, ExtendedKey);
-		AddRoundKey(blk, ExtendedKey, Nr);
-		Inverse_ShiftRows(blk);
-		Inverse_SubBytes(blk);
-		for (unsigned int x = (Nr - 1); x >= 1; x--)
+		memcpy(state, in, 16);
+		KeyExpansion(Key, ExtendedKey);
+
+		AddRoundKey(state, ExtendedKey + (Nr << 4));
+		Inverse_ShiftRows(state);
+		Inverse_SubBytes(state);
+		for (unsigned int round = (Nr - 1); round >= 1; round--)
 		{
-			AddRoundKey(blk, ExtendedKey, x);
-			Inverse_MixColumns(blk);
-			Inverse_ShiftRows(blk);
-			Inverse_SubBytes(blk);
+			AddRoundKey(state, ExtendedKey + (round << 4));
+			Inverse_MixColumns(state);
+			Inverse_ShiftRows(state);
+			Inverse_SubBytes(state);
 		}
-		AddRoundKey(blk, ExtendedKey, 0);
+		AddRoundKey(state, ExtendedKey);
 	}
 
 };
@@ -255,14 +270,14 @@ const word AES<10, 4>::Rcon[] = {
 int main()
 {
 	AES<10, 4> f;
-	byte plaintext[17], key[17];
+	byte plaintext[17], key[17], ciphertext[17];
 
 	strcpy((char*)plaintext, "SJTUandFDUbirthd");
 	printf("plaintext is %s\n", plaintext);
 	strcpy((char*)key, "IloveSJTUforever");
 
 	/*Encrypt */
-	f.Encrypt(plaintext, key);
+	f.Cipher(plaintext, key, ciphertext);
 	printf("ciphertext: ");
 	for (int i = 0; i < 16; i++)
 	{
@@ -272,7 +287,7 @@ int main()
 	printf("\n");
 
 	//decrypt
-	f.Decrypt(plaintext, key);
+	f.Decipher(ciphertext, key, plaintext);
 	printf("The decrypted plaintext is: %s", plaintext);
 
 	return 0;
