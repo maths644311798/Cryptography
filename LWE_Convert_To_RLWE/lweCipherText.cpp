@@ -5,18 +5,20 @@ LWECT::LWECT(const seal::Ciphertext& RLWECT, const std::size_t coeff_index,
 	const seal::SEALContext& context) {
 	// Read parameters
 	std::size_t num_coeff = RLWECT.poly_modulus_degree(); 
+	size_t num_modulus = RLWECT.coeff_modulus_size();
 	poly_modulus_degree_ = num_coeff;
-	std::shared_ptr<const seal::SEALContext::ContextData> context_data =
-	    context.first_context_data();
+	auto context_data = context.get_context_data(RLWECT.parms_id());
 	const seal::EncryptionParameters& parms = context_data->parms(); 
-	ct0.resize(parms.coeff_modulus().size());
+	const auto &moduli = parms.coeff_modulus();
+
+	ct0.resize(num_modulus);
 	ct1.parms_id() = seal::parms_id_zero; 
-	ct1.resize(num_coeff * (parms.coeff_modulus().size()));
+	ct1.resize(num_coeff * num_modulus);
 	ct1.parms_id() = RLWECT.parms_id();
 
-	for(unsigned int j=0; j < parms.coeff_modulus().size(); ++j)
+	for(unsigned int j=0; j < num_modulus; ++j)
 	{
-		const seal::Modulus& modulus = parms.coeff_modulus()[j]; 
+		const seal::Modulus& modulus = moduli[j]; 
 
 		// Read data from RLWE ciphertext, write to LWE ciphertext after transformation
 		// The resize function will check whether ciphertext is ntt form firstly, which
@@ -37,21 +39,23 @@ LWECT::LWECT(const seal::Ciphertext& RLWECT, const std::size_t coeff_index,
 		);
 		ct0[j] = RLWECT.data(0)[j*num_coeff + coeff_index];
 	}
-
-	ct1.parms_id() = RLWECT.parms_id();	
 }
 
 void Compute_N_inverse(const seal::SEALContext &context, std::vector<seal::Plaintext::pt_coeff_type> &N_inverse)
 {
 	auto parms = context.first_context_data()->parms();
+	const auto *ntt_tables = context.first_context_data()->small_ntt_tables();
+	const auto moduli = parms.coeff_modulus();
 	std::size_t num_coeff = parms.poly_modulus_degree();
 
-	std::vector<seal::Plaintext::pt_coeff_type> vector_num_coeff(parms.coeff_modulus().size(), num_coeff);
+	//std::vector<seal::Plaintext::pt_coeff_type> vector_num_coeff(moduli.size(), num_coeff);
 
-	for(unsigned int i = 0; i < parms.coeff_modulus().size(); ++i)
+	for(unsigned int i = 0; i < moduli.size(); ++i)
 	{
-		seal::util::try_invert_uint_mod(vector_num_coeff[i], parms.coeff_modulus()[i], N_inverse[i]);
+		//seal::util::try_invert_uint_mod(vector_num_coeff[i], parms.coeff_modulus()[i], N_inverse[i]);
+		N_inverse[i] = ntt_tables[i].inv_degree_modulo().operand;
 	}
+
 	return;
 }
 
@@ -75,8 +79,8 @@ void EvalTr(const seal::SEALContext &context, const seal::Ciphertext &src,
 			seal::Ciphertext &des, seal::GaloisKeys &galois_keys,
 			const unsigned int n)
 {
-	auto parms = context.first_context_data()->parms();
-	std::size_t num_coeff = parms.poly_modulus_degree();
+	std::size_t num_coeff = src.poly_modulus_degree(); 
+	//size_t num_modulus = src.coeff_modulus_size();
 	unsigned int pow_of_two = num_coeff;
 
 	des = src;
@@ -95,33 +99,38 @@ void LWE_ConvertTo_RLWE(const seal::SEALContext &context, const LWECT &src,
 						const std::vector<seal::Plaintext::pt_coeff_type> &N_inverse)
 {
 	//des should be initialized like seal::Ciphertext des(context);
-	auto parms = context.first_context_data()->parms();
-	std::size_t num_coeff = parms.poly_modulus_degree();
+	auto cntxt_dat = context.get_context_data(src.parms_id());
+	auto parms = cntxt_dat->parms();
+	std::size_t num_coeff = src.poly_modulus_degree(); 
+	auto moduli = parms.coeff_modulus();
+	size_t num_modulus = moduli.size();
+
 	unsigned int log2_num_coeff = std::log2(num_coeff);
 	seal::Evaluator evaluator(context);
 
 	seal::Plaintext src_ct1(src.get_ct1());
 	std::vector<uint64_t> src_ct0(src.get_ct0());
 
-	for(unsigned int i = 0; i < parms.coeff_modulus().size(); ++i)
+	for(unsigned int i = 0; i < num_modulus; ++i)
 	{
 		seal::util::multiply_poly_scalar_coeffmod(src.get_ct1().data() + i * num_coeff, 
-			num_coeff, N_inverse[i], parms.coeff_modulus()[i], src_ct1.data() + i * num_coeff);
+			num_coeff, N_inverse[i], moduli[i], src_ct1.data() + i * num_coeff);
 		unsigned long long tmp[2];
 		seal::util::multiply_uint64(src_ct0[i], N_inverse[i], tmp);
-		src_ct0[i] = ((__uint128_t(tmp[1]) << 64) + tmp[0]) % parms.coeff_modulus()[i].value();
+		//src_ct0[i] = ((__uint128_t(tmp[1]) << 64) + tmp[0]) % parms.coeff_modulus()[i].value();
+		src_ct0[i] = seal::util::barrett_reduce_128(tmp, moduli[i]);
 	}
 
-	des.resize(2);
+	des.parms_id() = src.parms_id();
 	des.is_ntt_form() = false;
-	des.parms_id() = context.first_parms_id();
+	des.resize(2);
 	//memset(des.data(0),0, parms.coeff_modulus().size() * sizeof(seal::Ciphertext::ct_coeff_type) * num_coeff);
-	for(unsigned int j=0; j<parms.coeff_modulus().size(); ++j)
+	for(unsigned int j=0; j < num_modulus; ++j)
 	{
 		des.data(0)[j*num_coeff] = src_ct0[j];
 	}
 	
-	std::copy_n(src_ct1.data(), num_coeff * parms.coeff_modulus().size(), des.data(1));
+	std::copy_n(src_ct1.data(), num_coeff * num_modulus, des.data(1));
 
 	int pow_of_two = num_coeff;
 	seal::Ciphertext temp(des);
@@ -138,9 +147,14 @@ seal::Ciphertext PackLWEs(const seal::SEALContext &context, std::vector<unsigned
 		std::vector<seal::Ciphertext> const &ct, seal::GaloisKeys &galois_keys)
 {
 	if (index_set.size() == 1) return ct[index_set[0]];
-	auto parms = context.first_context_data()->parms();
-	std::size_t num_coeff = parms.poly_modulus_degree();
-	seal::Ciphertext result(context), ct_even(context), ct_odd(context);
+
+	auto cntxt_dat = context.get_context_data(ct[index_set[0]].parms_id());
+	auto parms = cntxt_dat->parms();
+	std::size_t num_coeff = ct[index_set[0]].poly_modulus_degree(); 
+	auto moduli = parms.coeff_modulus();
+	size_t num_modulus = moduli.size();
+
+	seal::Ciphertext result(context, parms.parms_id()), ct_even(context, parms.parms_id()), ct_odd(context, parms.parms_id());
 	std::vector<unsigned long> even_index(index_set.size() >> 1), odd_index(index_set.size() >> 1);
 
 	for(unsigned int i = 0; i < even_index.size(); ++i)
@@ -155,7 +169,7 @@ seal::Ciphertext PackLWEs(const seal::SEALContext &context, std::vector<unsigned
 
 
 	seal::Evaluator evaluator(context);
-	seal::Ciphertext tmp(context), tmp2(context);
+	seal::Ciphertext tmp(context, parms.parms_id()), tmp2(context, parms.parms_id());
 	evaluator.multiply_plain(ct_odd, XN2l, tmp);
 	evaluator.add(ct_even, tmp, result);
 	evaluator.sub(ct_even, tmp, tmp2);
@@ -168,13 +182,17 @@ void LWEs_ConvertTo_RLWE(const seal::SEALContext &context, const std::vector<LWE
 						seal::Ciphertext &des, seal::GaloisKeys &galois_keys,
 						const std::vector<seal::Plaintext::pt_coeff_type> &N_inverse)
 {
-	auto parms = context.first_context_data()->parms();
-	std::size_t num_coeff = parms.poly_modulus_degree();
+	auto cntxt_dat = context.get_context_data(src[0].parms_id());
+	auto parms = cntxt_dat->parms();
+	std::size_t num_coeff = src[0].poly_modulus_degree(); 
+	auto moduli = parms.coeff_modulus();
+	size_t num_modulus = moduli.size();
+
 	unsigned int log2_num_coeff = std::log2(num_coeff);
 
 	des.resize(2);
 	des.is_ntt_form() = false;
-	des.parms_id() = context.first_parms_id();
+	des.parms_id() = parms.parms_id();
 
 	std::vector<seal::Ciphertext> src_ct(src.size(), des);
 	std::vector<unsigned long> index_set(src.size());
@@ -182,14 +200,16 @@ void LWEs_ConvertTo_RLWE(const seal::SEALContext &context, const std::vector<LWE
 	for(unsigned int j = 0; j < src.size(); ++j)
 	{
 		index_set[j] = j;
-	for(unsigned int i = 0; i < parms.coeff_modulus().size(); ++i)
-	{
-		seal::util::multiply_poly_scalar_coeffmod(src[j].get_ct1().data() + i * num_coeff, 
-			num_coeff, N_inverse[i], parms.coeff_modulus()[i], src_ct[j].data(1) + i * num_coeff);
-		unsigned long long tmp[2];
-		seal::util::multiply_uint64(src[j].get_ct0()[i], N_inverse[i], tmp);
-		src_ct[j].data(0)[i*num_coeff] = ((__uint128_t(tmp[1]) << 64) + tmp[0]) % parms.coeff_modulus()[i].value();
-	}
+		for(unsigned int i = 0; i < num_modulus; ++i)
+		{
+			seal::util::multiply_poly_scalar_coeffmod(src[j].get_ct1().data() + i * num_coeff, 
+				num_coeff, N_inverse[i], moduli[i], src_ct[j].data(1) + i * num_coeff);
+			unsigned long long tmp[2];
+			seal::util::multiply_uint64(src[j].get_ct0()[i], N_inverse[i], tmp);
+			//src_ct[j].data(0)[i*num_coeff] = ((__uint128_t(tmp[1]) << 64) + tmp[0]) % moduli[i].value();
+			src_ct[j].data(0)[i*num_coeff] = seal::util::barrett_reduce_128(tmp, moduli[i]);
+		}
+		src_ct[j].parms_id() = parms.parms_id();
 	}
 
 	seal::Ciphertext ct = PackLWEs(context, index_set, src_ct, galois_keys);
