@@ -27,27 +27,51 @@ public:
 	inline const seal::Plaintext& get_ct1() const { return ct1; }
 };
 
-void Compute_N_inverse(const seal::SEALContext &context, std::vector<seal::Plaintext::pt_coeff_type> &N_inverse);
-
 void Prepare_Galois(const seal::SEALContext &context, seal::KeyGenerator &keygen, seal::GaloisKeys &galois_keys);
 
 //n should be a power of 2
 void EvalTr(const seal::SEALContext &context, const LWECT &src,
-			seal::Ciphertext &des, seal::GaloisKeys &galois_keys,
-			const unsigned int n);
+				seal::Ciphertext &des, seal::GaloisKeys &galois_keys,
+				const unsigned int n);
 
-//Store an LWE ciphertext to the degree-0 term
-void LWE_ConvertTo_RLWE(const seal::SEALContext &context, const LWECT& src,
-						seal::Ciphertext &des, seal::GaloisKeys &galois_keys,
-						const std::vector<seal::Plaintext::pt_coeff_type> &N_inverse);
+class Packer
+{
+public:
+
+	std::vector<seal::Plaintext::pt_coeff_type> N_inverse;
+	// the inverse of N/n mod q
+	std::vector<seal::Plaintext::pt_coeff_type> N_over_n_inverse;
+	size_t n_;
+
+	Packer() = default;
+
+	/*
+	n should be a power of 2, meaning that we want to reserve the
+	iN/n-th coefficients, for 0 <= i < n.
+	*/
+	Packer(const seal::SEALContext &context, const size_t &n);
+
+	void Compute_inverses(const seal::SEALContext &context);
 
 
-//index_set is used to avoid copying lots of Ciphertexts
-seal::Ciphertext PackLWEs(const seal::SEALContext &context, std::vector<unsigned long> index_set,
-		std::vector<seal::Ciphertext> const &ct, seal::GaloisKeys &galois_keys);
-//src.size should be a power of 2 and <= poly_degree
-void LWEs_ConvertTo_RLWE(const seal::SEALContext &context, const std::vector<LWECT> &src,
-						seal::Ciphertext &des, seal::GaloisKeys &galois_keys,
-						const std::vector<seal::Plaintext::pt_coeff_type> &N_inverse);
+	//Store an LWE ciphertext to the degree-0 term
+	void LWE_ConvertTo_RLWE(const seal::SEALContext &context, const LWECT& src,
+							seal::Ciphertext &des, const seal::GaloisKeys &galois_keys) const;
 
+
+	//index_set is used to avoid copying lots of Ciphertexts
+	seal::Ciphertext PackLWEs(const seal::SEALContext &context, std::vector<unsigned long> index_set,
+			std::vector<seal::Ciphertext> const &ct, const seal::GaloisKeys &galois_keys) const;
+	//src.size should be a power of 2 and <= poly_degree
+	void LWEs_ConvertTo_RLWE(const seal::SEALContext &context, const std::vector<LWECT> &src,
+							seal::Ciphertext &des, const seal::GaloisKeys &galois_keys) const;
+
+	/*
+	n should be a power of 2, meaning that we want to reserve the
+	iN/n-th coefficients, for 0 <= i < n.
+	The result will be stored in c.
+	*/
+	void Reserve_Coefficients(const seal::SEALContext &context, seal::Ciphertext &c,
+							const seal::GaloisKeys &galois_keys) const;
+};
 #endif

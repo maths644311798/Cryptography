@@ -58,6 +58,19 @@ inline void print_parameters(const seal::SEALContext &context)
         std::cout << "|   plain_modulus: " << context_data.parms().plain_modulus().value() << std::endl;
     }
 
+    auto cnt_data = context.key_context_data();
+    std::cout << "context parms_id:\n";
+    while(cnt_data)
+    {
+        auto par_id = cnt_data->parms_id();
+        for(auto &x : par_id)
+        {
+            std::cout << x << " ";
+        }
+        std::cout << '\n';
+        cnt_data = cnt_data->next_context_data();
+    }
+
     std::cout << "\\" << std::endl;
 }
 
@@ -71,7 +84,7 @@ Helper function: Prints the `parms_id' to std::ostream.
 int main()
 {
     EncryptionParameters parms(scheme_type::bfv);
-    size_t poly_modulus_degree = 4096;
+    size_t poly_modulus_degree = 8192;
     parms.set_poly_modulus_degree(poly_modulus_degree);
     parms.set_coeff_modulus(CoeffModulus::BFVDefault(poly_modulus_degree));
     
@@ -112,9 +125,7 @@ int main()
     
     seal::GaloisKeys galois_keys;
     Prepare_Galois(context, RLWE_key_generator, galois_keys);
-    std::vector<seal::Plaintext::pt_coeff_type> N_inverse;
-    N_inverse.resize(context.first_context_data()->parms().coeff_modulus().size());
-    Compute_N_inverse(context, N_inverse);
+    Packer packer(context, 2);
 
     Plaintext pt1=seal::Plaintext(poly_modulus_degree);//////明文必须初始化
     Plaintext pt2=seal::Plaintext(poly_modulus_degree);
@@ -123,12 +134,14 @@ int main()
     pt2.set_zero();
     pt3.set_zero();
     pt1[0] = 1;
-    pt2[0] = 1;
-    pt2[10] = 10;
+    pt2[0] = 10;
+    for(size_t i = 1; i < 40; ++i) 
+        pt2[i] = i;
+    pt2[poly_modulus_degree / 2] = 2;
     
     Ciphertext ct(context), ct1(context);
     encryptor.encrypt_symmetric(pt1, ct);
-    cout << "    + noise budget in freshly encrypted ct: " << decryptor.invariant_noise_budget(ct) << " bits"
+    cout << "   noise budget in freshly encrypted ct: " << decryptor.invariant_noise_budget(ct) << " bits"
          << endl;
     
     decryptor.decrypt(ct,pt3);
@@ -137,9 +150,11 @@ int main()
  
     {
     vector<LWECT> lwe;
-    LWECT ct_lwe(ct, 0, context);LWECT ct_lwe1(ct, 1, context);lwe.push_back(ct_lwe);lwe.push_back(ct_lwe1);
-    LWEs_ConvertTo_RLWE(context, lwe, ct, galois_keys, N_inverse);
-     }
+    LWECT ct_lwe(ct, 0, context), ct_lwe1(ct, 1, context);
+    lwe.push_back(ct_lwe);
+    lwe.push_back(ct_lwe1);
+    packer.LWEs_ConvertTo_RLWE(context, lwe, ct, galois_keys);
+    }
 
     cout << "-------LWEs Convert To RLWE----------\n";
     decryptor_new.decrypt(ct,pt3);
@@ -151,12 +166,21 @@ int main()
 
 
     encryptor_new.encrypt_symmetric(pt2, ct1);////这里的密钥变了
+
     evaluator.multiply_inplace(ct,ct1);
+    auto par_id = ct.parms_id();
+    std::cout << "par id[0] = " <<  par_id[0] << '\n';
+
     evaluator.relinearize_inplace(ct, relin_keys);
     cout << "   noise budget in mul encrypted ct: " << decryptor_new.invariant_noise_budget(ct) << " bits"
          << endl;
     decryptor_new.decrypt(ct,pt3);
     temp_s = pt3.to_string();
     cout << "Mul Result " << temp_s << '\n';
+
+    packer.Reserve_Coefficients(context, ct, galois_keys);
+    decryptor_new.decrypt(ct,pt3);
+    temp_s = pt3.to_string();
+    cout << "Reserve Result " << temp_s << '\n';
 
 }

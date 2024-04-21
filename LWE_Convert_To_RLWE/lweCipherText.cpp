@@ -41,21 +41,29 @@ LWECT::LWECT(const seal::Ciphertext& RLWECT, const std::size_t coeff_index,
 	}
 }
 
-void Compute_N_inverse(const seal::SEALContext &context, std::vector<seal::Plaintext::pt_coeff_type> &N_inverse)
+Packer::Packer(const seal::SEALContext &context, const size_t &n)
+: n_(n)
+{
+	Compute_inverses(context);
+}
+
+void Packer::Compute_inverses(const seal::SEALContext &context)
 {
 	auto parms = context.first_context_data()->parms();
 	const auto *ntt_tables = context.first_context_data()->small_ntt_tables();
 	const auto moduli = parms.coeff_modulus();
 	std::size_t num_coeff = parms.poly_modulus_degree();
 
-	//std::vector<seal::Plaintext::pt_coeff_type> vector_num_coeff(moduli.size(), num_coeff);
+	N_inverse.reserve(moduli.size());
+
+	size_t x = num_coeff / n_;
+	N_over_n_inverse.assign(moduli.size(), x);
 
 	for(unsigned int i = 0; i < moduli.size(); ++i)
 	{
-		//seal::util::try_invert_uint_mod(vector_num_coeff[i], parms.coeff_modulus()[i], N_inverse[i]);
 		N_inverse[i] = ntt_tables[i].inv_degree_modulo().operand;
+		seal::util::try_invert_uint_mod(x, moduli[i], N_over_n_inverse[i]);
 	}
-
 	return;
 }
 
@@ -76,11 +84,10 @@ void Prepare_Galois(const seal::SEALContext &context, seal::KeyGenerator &keygen
 }
 
 void EvalTr(const seal::SEALContext &context, const seal::Ciphertext &src,
-			seal::Ciphertext &des, seal::GaloisKeys &galois_keys,
+			seal::Ciphertext &des, const seal::GaloisKeys &galois_keys,
 			const unsigned int n)
 {
-	std::size_t num_coeff = src.poly_modulus_degree(); 
-	//size_t num_modulus = src.coeff_modulus_size();
+	std::size_t num_coeff = src.poly_modulus_degree();
 	unsigned int pow_of_two = num_coeff;
 
 	des = src;
@@ -94,9 +101,8 @@ void EvalTr(const seal::SEALContext &context, const seal::Ciphertext &src,
 	}
 }
 
-void LWE_ConvertTo_RLWE(const seal::SEALContext &context, const LWECT &src,
-						seal::Ciphertext &des, seal::GaloisKeys &galois_keys,
-						const std::vector<seal::Plaintext::pt_coeff_type> &N_inverse)
+void Packer::LWE_ConvertTo_RLWE(const seal::SEALContext &context, const LWECT &src,
+						seal::Ciphertext &des, const seal::GaloisKeys &galois_keys) const
 {
 	//des should be initialized like seal::Ciphertext des(context);
 	auto cntxt_dat = context.get_context_data(src.parms_id());
@@ -143,8 +149,8 @@ void LWE_ConvertTo_RLWE(const seal::SEALContext &context, const LWECT &src,
 	return;
 }
 
-seal::Ciphertext PackLWEs(const seal::SEALContext &context, std::vector<unsigned long> index_set,
-		std::vector<seal::Ciphertext> const &ct, seal::GaloisKeys &galois_keys)
+seal::Ciphertext Packer::PackLWEs(const seal::SEALContext &context, std::vector<unsigned long> index_set,
+		std::vector<seal::Ciphertext> const &ct, const seal::GaloisKeys &galois_keys) const
 {
 	if (index_set.size() == 1) return ct[index_set[0]];
 
@@ -178,9 +184,8 @@ seal::Ciphertext PackLWEs(const seal::SEALContext &context, std::vector<unsigned
 	return result;
 }
 
-void LWEs_ConvertTo_RLWE(const seal::SEALContext &context, const std::vector<LWECT> &src,
-						seal::Ciphertext &des, seal::GaloisKeys &galois_keys,
-						const std::vector<seal::Plaintext::pt_coeff_type> &N_inverse)
+void Packer::LWEs_ConvertTo_RLWE(const seal::SEALContext &context, const std::vector<LWECT> &src,
+						seal::Ciphertext &des, const seal::GaloisKeys &galois_keys) const
 {
 	auto cntxt_dat = context.get_context_data(src[0].parms_id());
 	auto parms = cntxt_dat->parms();
@@ -206,7 +211,6 @@ void LWEs_ConvertTo_RLWE(const seal::SEALContext &context, const std::vector<LWE
 				num_coeff, N_inverse[i], moduli[i], src_ct[j].data(1) + i * num_coeff);
 			unsigned long long tmp[2];
 			seal::util::multiply_uint64(src[j].get_ct0()[i], N_inverse[i], tmp);
-			//src_ct[j].data(0)[i*num_coeff] = ((__uint128_t(tmp[1]) << 64) + tmp[0]) % moduli[i].value();
 			src_ct[j].data(0)[i*num_coeff] = seal::util::barrett_reduce_128(tmp, moduli[i]);
 		}
 		src_ct[j].parms_id() = parms.parms_id();
@@ -215,4 +219,25 @@ void LWEs_ConvertTo_RLWE(const seal::SEALContext &context, const std::vector<LWE
 	seal::Ciphertext ct = PackLWEs(context, index_set, src_ct, galois_keys);
 	EvalTr(context, ct, des, galois_keys, src.size());
 	return;
+}
+
+void Packer::Reserve_Coefficients(const seal::SEALContext &context, seal::Ciphertext &c,
+								const seal::GaloisKeys &galois_keys) const
+{
+	auto cntxt_dat = context.get_context_data(c.parms_id());
+	auto parms = cntxt_dat->parms();
+	std::size_t num_coeff = c.poly_modulus_degree(); 
+	auto moduli = parms.coeff_modulus();
+	size_t num_modulus = moduli.size();
+
+	seal::Ciphertext::ct_coeff_type* pt[2] = {c.data(0), c.data(1)};
+	for(unsigned int i = 0; i < num_modulus; ++i)
+	{
+		seal::util::multiply_poly_scalar_coeffmod(pt[0], num_coeff, N_over_n_inverse[i], moduli[i], pt[0]);
+		seal::util::multiply_poly_scalar_coeffmod(pt[1], num_coeff, N_over_n_inverse[i], moduli[i], pt[1]);
+		pt[0] += num_coeff;
+		pt[1] += num_coeff;
+	}
+
+	EvalTr(context, c, c, galois_keys, n_);
 }
