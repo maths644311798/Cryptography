@@ -41,6 +41,7 @@ public:
 	std::vector<seal::Plaintext::pt_coeff_type> N_inverse;
 	// the inverse of N/n mod q
 	std::vector<seal::Plaintext::pt_coeff_type> N_over_n_inverse;
+	std::vector<seal::Plaintext::pt_coeff_type> n_inverse;
 	size_t n_;
 
 	Packer() = default;
@@ -65,6 +66,14 @@ public:
 	//src.size should be a power of 2 and <= poly_degree
 	void LWEs_ConvertTo_RLWE(const seal::SEALContext &context, const std::vector<LWECT> &src,
 							seal::Ciphertext &des, const seal::GaloisKeys &galois_keys) const;
+
+
+	/*
+	This function is like LWEs_ConvertTo_RLWE, but without using EvalTr.
+	*/
+	void LWEs_ConvertTo_RLWE_Without_EvalTr(const seal::SEALContext &context, const std::vector<LWECT> &src,
+							seal::Ciphertext &des, const seal::GaloisKeys &galois_keys) const;
+
 
 	/*
 	n should be a power of 2, meaning that we want to reserve the

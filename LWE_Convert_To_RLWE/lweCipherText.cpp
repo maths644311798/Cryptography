@@ -63,6 +63,7 @@ void Packer::Compute_inverses(const seal::SEALContext &context)
 	{
 		N_inverse[i] = ntt_tables[i].inv_degree_modulo().operand;
 		seal::util::try_invert_uint_mod(x, moduli[i], N_over_n_inverse[i]);
+		seal::util::try_invert_uint_mod(n_, moduli[i], n_inverse[i]);
 	}
 	return;
 }
@@ -193,7 +194,6 @@ void Packer::LWEs_ConvertTo_RLWE(const seal::SEALContext &context, const std::ve
 	auto moduli = parms.coeff_modulus();
 	size_t num_modulus = moduli.size();
 
-	unsigned int log2_num_coeff = std::log2(num_coeff);
 
 	des.resize(2);
 	des.is_ntt_form() = false;
@@ -218,6 +218,41 @@ void Packer::LWEs_ConvertTo_RLWE(const seal::SEALContext &context, const std::ve
 
 	seal::Ciphertext ct = PackLWEs(context, index_set, src_ct, galois_keys);
 	EvalTr(context, ct, des, galois_keys, src.size());
+	return;
+}
+
+void Packer::LWEs_ConvertTo_RLWE_Without_EvalTr(const seal::SEALContext &context, const std::vector<LWECT> &src,
+							seal::Ciphertext &des, const seal::GaloisKeys &galois_keys) const
+{
+	auto cntxt_dat = context.get_context_data(src[0].parms_id());
+	auto parms = cntxt_dat->parms();
+	std::size_t num_coeff = src[0].poly_modulus_degree(); 
+	auto moduli = parms.coeff_modulus();
+	size_t num_modulus = moduli.size();
+
+
+	des.resize(2);
+	des.is_ntt_form() = false;
+	des.parms_id() = parms.parms_id();
+
+	std::vector<seal::Ciphertext> src_ct(src.size(), des);
+	std::vector<unsigned long> index_set(src.size());
+	
+	for(unsigned int j = 0; j < src.size(); ++j)
+	{
+		index_set[j] = j;
+		for(unsigned int i = 0; i < num_modulus; ++i)
+		{
+			seal::util::multiply_poly_scalar_coeffmod(src[j].get_ct1().data() + i * num_coeff, 
+				num_coeff, n_inverse[i], moduli[i], src_ct[j].data(1) + i * num_coeff);
+			unsigned long long tmp[2];
+			seal::util::multiply_uint64(src[j].get_ct0()[i], n_inverse[i], tmp);
+			src_ct[j].data(0)[i*num_coeff] = seal::util::barrett_reduce_128(tmp, moduli[i]);
+		}
+		src_ct[j].parms_id() = parms.parms_id();
+	}
+
+	seal::Ciphertext ct = PackLWEs(context, index_set, src_ct, galois_keys);
 	return;
 }
 

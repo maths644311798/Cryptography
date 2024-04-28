@@ -153,7 +153,7 @@ int main()
     LWECT ct_lwe(ct, 0, context), ct_lwe1(ct, 1, context);
     lwe.push_back(ct_lwe);
     lwe.push_back(ct_lwe1);
-    packer.LWEs_ConvertTo_RLWE(context, lwe, ct, galois_keys);
+    packer.LWEs_ConvertTo_RLWE_Without_EvalTr(context, lwe, ct, galois_keys);
     }
 
     cout << "-------LWEs Convert To RLWE----------\n";
