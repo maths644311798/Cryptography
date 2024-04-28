@@ -144,9 +144,6 @@ int main()
     cout << "   noise budget in freshly encrypted ct: " << decryptor.invariant_noise_budget(ct) << " bits"
          << endl;
     
-    decryptor.decrypt(ct,pt3);
-    cout << "instance pt = " << pt3.to_string() << '\n';
-    
  
     {
     vector<LWECT> lwe;
@@ -159,12 +156,12 @@ int main()
     cout << "-------LWEs Convert To RLWE----------\n";
     decryptor_new.decrypt(ct,pt3);
     std::string temp_s = pt3.to_string();
-    if(temp_s.length() > 20)
-        cout << "too long\n";
-    else
+    //if(temp_s.length() > 20)
+    //    cout << "too long\n";
+    //else
         cout << "Correct Result " << temp_s << '\n';
 
-
+    /*
     encryptor_new.encrypt_symmetric(pt2, ct1);////这里的密钥变了
 
     evaluator.multiply_inplace(ct,ct1);
@@ -182,5 +179,6 @@ int main()
     decryptor_new.decrypt(ct,pt3);
     temp_s = pt3.to_string();
     cout << "Reserve Result " << temp_s << '\n';
+    */
 
 }

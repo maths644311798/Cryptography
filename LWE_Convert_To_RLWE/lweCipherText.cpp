@@ -55,6 +55,7 @@ void Packer::Compute_inverses(const seal::SEALContext &context)
 	std::size_t num_coeff = parms.poly_modulus_degree();
 
 	N_inverse.reserve(moduli.size());
+	n_inverse.reserve(moduli.size());
 
 	size_t x = num_coeff / n_;
 	N_over_n_inverse.assign(moduli.size(), x);
@@ -252,7 +253,7 @@ void Packer::LWEs_ConvertTo_RLWE_Without_EvalTr(const seal::SEALContext &context
 		src_ct[j].parms_id() = parms.parms_id();
 	}
 
-	seal::Ciphertext ct = PackLWEs(context, index_set, src_ct, galois_keys);
+	des = PackLWEs(context, index_set, src_ct, galois_keys);
 	return;
 }
 
