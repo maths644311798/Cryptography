@@ -318,3 +318,17 @@ void LWE_Key_ConvertTo_RLWE_Key(const seal::SEALContext& context, const lweSecre
 	return;
 }
 
+Timer::Timer()
+{
+  t_ = std::chrono::system_clock::now();
+}
+
+
+void Timer::StopWatch()
+{
+  auto tmp = std::chrono::system_clock::now();
+  double dr = std::chrono::duration<double,std::micro>(tmp - t_).count();
+  std::cout << dr << " microsecond\n";
+  t_ = tmp;
+}
+

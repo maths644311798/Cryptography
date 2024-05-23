@@ -163,7 +163,7 @@ seal::Ciphertext Packer::PackLWEs(const seal::SEALContext &context, std::vector<
 	size_t num_modulus = moduli.size();
 	size_t ct_size = ct[index_set[0]].size();
 
-	seal::Ciphertext result(context, parms.parms_id()), ct_even(context, parms.parms_id()), ct_odd(context, parms.parms_id());
+	seal::Ciphertext ct_even(context, parms.parms_id()), ct_odd(context, parms.parms_id());
 	std::vector<unsigned long> even_index(index_set.size() >> 1), odd_index(index_set.size() >> 1);
 
 	for(unsigned int i = 0; i < even_index.size(); ++i)
@@ -171,21 +171,20 @@ seal::Ciphertext Packer::PackLWEs(const seal::SEALContext &context, std::vector<
 		even_index[i] = index_set[i << 1];
 		odd_index[i] = index_set[(i << 1) + 1];
 	}
+
 	ct_even = PackLWEs(context, even_index, ct, galois_keys);
-	ct_odd = PackLWEs(context, odd_index, ct, galois_keys);
-	//seal::Plaintext XN2l(num_coeff, num_coeff);
-	//*(XN2l.data() + num_coeff / index_set.size()) = 1;
+	ct_odd =  PackLWEs(context, odd_index, ct, galois_keys);
 	std::size_t N2l = num_coeff / index_set.size();
 
 
 	seal::Evaluator evaluator(context);
-	seal::Ciphertext tmp(ct_odd), tmp2(context, parms.parms_id());
-	//evaluator.multiply_plain(ct_odd, XN2l, tmp);
+	seal::Ciphertext tmp(ct_odd), tmp2(ct_even), result(ct_even);
+
 	for(size_t i = 0; i < ct_size; ++i)
 		seal::util::negacyclic_shift_poly_coeffmod( seal::util::ConstRNSIter(ct_odd.data(i), num_coeff), 
 						num_modulus, N2l, moduli, seal::util::RNSIter(tmp.data(i), num_coeff));
-	evaluator.add(ct_even, tmp, result);
-	evaluator.sub(ct_even, tmp, tmp2);
+	evaluator.add_inplace(result, tmp);
+	evaluator.sub_inplace(tmp2, tmp);
 	evaluator.apply_galois_inplace(tmp2, index_set.size() + 1, galois_keys);
 	evaluator.add_inplace(result, tmp2);
 	return result;

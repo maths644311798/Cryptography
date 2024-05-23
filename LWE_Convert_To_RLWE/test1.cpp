@@ -1,3 +1,4 @@
+
 #include <iostream>
 #include "seal/seal.h"
 #include "lweCipherText.h"
@@ -133,7 +134,7 @@ int main()
     pt1.set_zero();
     pt2.set_zero();
     pt3.set_zero();
-    pt1[0] = 1;
+        pt1[0] = 1;
     pt2[0] = 10;
     for(size_t i = 1; i < 40; ++i) 
         pt2[i] = i;
@@ -159,26 +160,7 @@ int main()
     //if(temp_s.length() > 20)
     //    cout << "too long\n";
     //else
-        cout << "Correct Result " << temp_s << '\n';
+    //    cout << "Correct Result " << temp_s << '\n';
 
-    /*
-    encryptor_new.encrypt_symmetric(pt2, ct1);////这里的密钥变了
-
-    evaluator.multiply_inplace(ct,ct1);
-    auto par_id = ct.parms_id();
-    std::cout << "par id[0] = " <<  par_id[0] << '\n';
-
-    evaluator.relinearize_inplace(ct, relin_keys);
-    cout << "   noise budget in mul encrypted ct: " << decryptor_new.invariant_noise_budget(ct) << " bits"
-         << endl;
-    decryptor_new.decrypt(ct,pt3);
-    temp_s = pt3.to_string();
-    cout << "Mul Result " << temp_s << '\n';
-
-    packer.Reserve_Coefficients(context, ct, galois_keys);
-    decryptor_new.decrypt(ct,pt3);
-    temp_s = pt3.to_string();
-    cout << "Reserve Result " << temp_s << '\n';
-    */
 
 }

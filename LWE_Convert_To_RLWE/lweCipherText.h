@@ -6,6 +6,7 @@
 #include <memory>
 #include "include.h"
 #include "seal/util/polyarithsmallmod.h"
+#include "utils.h"
 
 class LWECT {
 private:
