@@ -1,5 +1,6 @@
 
 #include <iostream>
+#include <future>
 #include "seal/seal.h"
 #include "lweCipherText.h"
 #include "lweDecryptor.hpp"
@@ -85,16 +86,18 @@ Helper function: Prints the `parms_id' to std::ostream.
 int main()
 {
     EncryptionParameters parms(scheme_type::bfv);
-    size_t poly_modulus_degree = 8192;
+    size_t poly_modulus_degree = 4096;
+    size_t num_coeff = poly_modulus_degree;
     parms.set_poly_modulus_degree(poly_modulus_degree);
     parms.set_coeff_modulus(CoeffModulus::BFVDefault(poly_modulus_degree));
     
     parms.set_plain_modulus(PLAIN_MODULUS);
+    auto moduli = parms.coeff_modulus();
+    size_t num_modulus = moduli.size();
     SEALContext context(parms,true, seal::sec_level_type::none);
 
     auto context_data = context.first_context_data();
-    auto& coeff_modulus = parms.coeff_modulus();
-    size_t first_coeff_modulus_size = coeff_modulus.size() - 1;
+    size_t first_coeff_modulus_size = num_modulus - 1;
 
     print_parameters(context);
     cout << endl;
@@ -126,6 +129,7 @@ int main()
     
     seal::GaloisKeys galois_keys;
     Prepare_Galois(context, RLWE_key_generator, galois_keys);
+
     Packer packer(context, 2);
 
     Plaintext pt1=seal::Plaintext(poly_modulus_degree);//////明文必须初始化
@@ -134,18 +138,18 @@ int main()
     pt1.set_zero();
     pt2.set_zero();
     pt3.set_zero();
-        pt1[0] = 1;
+    pt1[0] = 1;
+    pt1[1] = 2;
     pt2[0] = 10;
     for(size_t i = 1; i < 40; ++i) 
         pt2[i] = i;
     pt2[poly_modulus_degree / 2] = 2;
     
-    Ciphertext ct(context), ct1(context);
+    Ciphertext ct;
+
+
     encryptor.encrypt_symmetric(pt1, ct);
-    cout << "   noise budget in freshly encrypted ct: " << decryptor.invariant_noise_budget(ct) << " bits"
-         << endl;
-    
- 
+
     {
     vector<LWECT> lwe;
     LWECT ct_lwe(ct, 0, context), ct_lwe1(ct, 1, context);
@@ -160,7 +164,7 @@ int main()
     //if(temp_s.length() > 20)
     //    cout << "too long\n";
     //else
-    //    cout << "Correct Result " << temp_s << '\n';
+ //       cout << "Correct Result " << temp_s << '\n';
 
-
+    return 0;
 }

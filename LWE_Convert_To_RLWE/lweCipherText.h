@@ -35,6 +35,7 @@ void EvalTr(const seal::SEALContext &context, const LWECT &src,
 				seal::Ciphertext &des, seal::GaloisKeys &galois_keys,
 				const unsigned int n);
 
+//not thread-safe
 class Packer
 {
 public:
@@ -45,6 +46,10 @@ public:
 	std::vector<seal::Plaintext::pt_coeff_type> n_inverse;
 	size_t n_;
 
+	constexpr static size_t tmp_size = 4;
+	//not thread-safe
+	mutable seal::Ciphertext allocated_tmp[tmp_size];
+
 	Packer() = default;
 
 	/*
@@ -53,12 +58,15 @@ public:
 	*/
 	Packer(const seal::SEALContext &context, const size_t &n);
 
+	void allocate_memory(const seal::SEALContext &context);
+
 	void Compute_inverses(const seal::SEALContext &context);
 
 
 	//Store an LWE ciphertext to the degree-0 term
 	void LWE_ConvertTo_RLWE(const seal::SEALContext &context, const LWECT& src,
-							seal::Ciphertext &des, const seal::GaloisKeys &galois_keys) const;
+							seal::Ciphertext &des, const seal::GaloisKeys &galois_keys,
+							seal::MemoryPoolHandle pool = seal::MemoryManager::GetPool()) const;
 
 
 	//index_set is used to avoid copying lots of Ciphertexts

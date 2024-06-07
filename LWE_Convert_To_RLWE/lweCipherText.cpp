@@ -45,6 +45,7 @@ Packer::Packer(const seal::SEALContext &context, const size_t &n)
 : n_(n)
 {
 	Compute_inverses(context);
+	allocate_memory(context);
 }
 
 void Packer::Compute_inverses(const seal::SEALContext &context)
@@ -67,6 +68,15 @@ void Packer::Compute_inverses(const seal::SEALContext &context)
 		seal::util::try_invert_uint_mod(n_, moduli[i], n_inverse[i]);
 	}
 	return;
+}
+
+void Packer::allocate_memory(const seal::SEALContext &context)
+{
+	for(size_t i=0; i<tmp_size; ++i)
+	{
+		allocated_tmp[i] = seal::Ciphertext(context);
+		allocated_tmp[i].resize(2);
+	}
 }
 
 void Prepare_Galois(const seal::SEALContext &context, seal::KeyGenerator &keygen, seal::GaloisKeys &galois_keys)
@@ -104,7 +114,8 @@ void EvalTr(const seal::SEALContext &context, const seal::Ciphertext &src,
 }
 
 void Packer::LWE_ConvertTo_RLWE(const seal::SEALContext &context, const LWECT &src,
-						seal::Ciphertext &des, const seal::GaloisKeys &galois_keys) const
+						seal::Ciphertext &des, const seal::GaloisKeys &galois_keys,
+						seal::MemoryPoolHandle pool) const
 {
 	//des should be initialized like seal::Ciphertext des(context);
 	auto cntxt_dat = context.get_context_data(src.parms_id());
@@ -116,7 +127,7 @@ void Packer::LWE_ConvertTo_RLWE(const seal::SEALContext &context, const LWECT &s
 	unsigned int log2_num_coeff = std::log2(num_coeff);
 	seal::Evaluator evaluator(context);
 
-	seal::Plaintext src_ct1(src.get_ct1());
+	seal::Plaintext src_ct1(src.get_ct1(), pool);
 	std::vector<uint64_t> src_ct0(src.get_ct0());
 
 	for(unsigned int i = 0; i < num_modulus; ++i)
@@ -163,7 +174,7 @@ seal::Ciphertext Packer::PackLWEs(const seal::SEALContext &context, std::vector<
 	size_t num_modulus = moduli.size();
 	size_t ct_size = ct[index_set[0]].size();
 
-	seal::Ciphertext ct_even(context, parms.parms_id()), ct_odd(context, parms.parms_id());
+	//seal::Ciphertext ct_even(context, parms.parms_id()), ct_odd(context, parms.parms_id());
 	std::vector<unsigned long> even_index(index_set.size() >> 1), odd_index(index_set.size() >> 1);
 
 	for(unsigned int i = 0; i < even_index.size(); ++i)
@@ -172,22 +183,21 @@ seal::Ciphertext Packer::PackLWEs(const seal::SEALContext &context, std::vector<
 		odd_index[i] = index_set[(i << 1) + 1];
 	}
 
-	ct_even = PackLWEs(context, even_index, ct, galois_keys);
-	ct_odd =  PackLWEs(context, odd_index, ct, galois_keys);
+	BFV_assign(allocated_tmp[3], PackLWEs(context, odd_index, ct, galois_keys));
+	BFV_assign(allocated_tmp[1], PackLWEs(context, even_index, ct, galois_keys));
 	std::size_t N2l = num_coeff / index_set.size();
 
-
 	seal::Evaluator evaluator(context);
-	seal::Ciphertext tmp(ct_odd), tmp2(ct_even), result(ct_even);
+	BFV_assign(allocated_tmp[2], allocated_tmp[1]);
 
 	for(size_t i = 0; i < ct_size; ++i)
-		seal::util::negacyclic_shift_poly_coeffmod( seal::util::ConstRNSIter(ct_odd.data(i), num_coeff), 
-						num_modulus, N2l, moduli, seal::util::RNSIter(tmp.data(i), num_coeff));
-	evaluator.add_inplace(result, tmp);
-	evaluator.sub_inplace(tmp2, tmp);
-	evaluator.apply_galois_inplace(tmp2, index_set.size() + 1, galois_keys);
-	evaluator.add_inplace(result, tmp2);
-	return result;
+		seal::util::negacyclic_shift_poly_coeffmod( seal::util::ConstRNSIter(allocated_tmp[3].data(i), num_coeff), 
+						num_modulus, N2l, moduli, seal::util::RNSIter(allocated_tmp[0].data(i), num_coeff));
+	evaluator.add_inplace(allocated_tmp[2], allocated_tmp[0]);
+	evaluator.sub_inplace(allocated_tmp[1], allocated_tmp[0]);
+	evaluator.apply_galois_inplace(allocated_tmp[1], index_set.size() + 1, galois_keys);
+	evaluator.add_inplace(allocated_tmp[2], allocated_tmp[1]);
+	return allocated_tmp[2];
 }
 
 void Packer::LWEs_ConvertTo_RLWE(const seal::SEALContext &context, const std::vector<LWECT> &src,
