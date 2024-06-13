@@ -79,8 +79,9 @@ inline void print_parameters(const seal::SEALContext &context)
 /*
 Helper function: Prints the `parms_id' to std::ostream.
 */
-
-
+#define PRIME_60 (1152921504606830593ULL)
+#define PRIME_49 (562949953216513ULL)
+#define COEFF_MOD_ARR {PRIME_60, PRIME_49}
 
 
 int main()
@@ -89,14 +90,16 @@ int main()
     size_t poly_modulus_degree = 4096;
     size_t num_coeff = poly_modulus_degree;
     parms.set_poly_modulus_degree(poly_modulus_degree);
-    parms.set_coeff_modulus(CoeffModulus::BFVDefault(poly_modulus_degree));
+    parms.set_coeff_modulus(COEFF_MOD_ARR);
     
     parms.set_plain_modulus(PLAIN_MODULUS);
     auto moduli = parms.coeff_modulus();
     size_t num_modulus = moduli.size();
     SEALContext context(parms,true, seal::sec_level_type::none);
+    seal::MemoryPoolHandle pool =  seal::MemoryManager::GetPool();
 
     auto context_data = context.first_context_data();
+    auto galois_tool = context_data->galois_tool();
     size_t first_coeff_modulus_size = num_modulus - 1;
 
     print_parameters(context);
@@ -128,7 +131,7 @@ int main()
     RLWE_key_generator.create_relin_keys(relin_keys);
     
     seal::GaloisKeys galois_keys;
-    Prepare_Galois(context, RLWE_key_generator, galois_keys);
+    Prepare_Galois(context, keygen, galois_keys);
 
     Packer packer(context, 2);
 
@@ -149,7 +152,16 @@ int main()
 
 
     encryptor.encrypt_symmetric(pt1, ct);
-
+    evaluator.transform_to_ntt_inplace(ct);
+    Ciphertext tmp(ct);
+    Timer timer;
+    BFV_galois_inplace_ntt(context, ct, 5, galois_keys, pool);
+    timer.StopWatch();
+    evaluator.transform_from_ntt_inplace(ct);
+    timer.StopWatch();
+    evaluator.apply_galois_inplace(ct, 5, galois_keys, pool);
+    timer.StopWatch();
+/*
     {
     vector<LWECT> lwe;
     LWECT ct_lwe(ct, 0, context), ct_lwe1(ct, 1, context);
@@ -157,14 +169,14 @@ int main()
     lwe.push_back(ct_lwe1);
     packer.LWEs_ConvertTo_RLWE_Without_EvalTr(context, lwe, ct, galois_keys);
     }
-
-    cout << "-------LWEs Convert To RLWE----------\n";
-    decryptor_new.decrypt(ct,pt3);
+*/
+ //   cout << "-------LWEs Convert To RLWE----------\n";
+    decryptor.decrypt(ct,pt3);
     std::string temp_s = pt3.to_string();
     //if(temp_s.length() > 20)
     //    cout << "too long\n";
     //else
- //       cout << "Correct Result " << temp_s << '\n';
+        cout << "Correct Result " << temp_s << '\n';
 
     return 0;
 }

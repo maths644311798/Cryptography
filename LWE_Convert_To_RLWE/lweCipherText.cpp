@@ -26,7 +26,6 @@ LWECT::LWECT(const seal::Ciphertext& RLWECT, const std::size_t coeff_index,
 		uint64_t* destination_ptr = ct1.data() + j*num_coeff;
 		const seal::Ciphertext::ct_coeff_type* source_ptr = RLWECT.data(1) + j*num_coeff; // Iterator points to head of c1
 
-		// Extraction, see https://www.wolai.com/pxxu1LrqTjXTVbcN98aH6U for details
 		auto reverse_ptr = std::reverse_iterator<uint64_t*>(destination_ptr + coeff_index + 1);
 		std::copy_n(source_ptr, coeff_index + 1, reverse_ptr);
 		// Reverse and negate coefficients in index [coeff_index + 1, num_coeff]
