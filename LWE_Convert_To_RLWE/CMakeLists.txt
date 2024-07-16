@@ -11,7 +11,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 #add_executable(test test.cpp lweCipherText.cpp)
-add_executable(test1 test1.cpp lweCipherText.cpp utils.cpp)
+add_executable(test1 test1.cpp lweCipherText.cpp utils.cpp HalfCipher.cpp)
 # Import Microsoft SEAL
 find_package(SEAL 4.1 REQUIRED)
 

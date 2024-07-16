@@ -6,6 +6,7 @@
 #include "lweDecryptor.hpp"
 #include "lweSecretKey.hpp"
 #include "utils.h"
+#include "HalfCipher.h"
 
 using namespace std;
 using namespace seal;
@@ -113,8 +114,10 @@ int main()
     SecretKey secret_key;
     secret_key = keygen.secret_key();
 
+    PublicKey public_key;
+    keygen.create_public_key(public_key);
 
-    Encryptor encryptor(context, secret_key);
+    Encryptor encryptor(context, public_key, secret_key);
     Evaluator evaluator(context);
     Decryptor decryptor(context, secret_key);
 
@@ -135,7 +138,7 @@ int main()
 
     Packer packer(context, 2);
 
-    Plaintext pt1=seal::Plaintext(poly_modulus_degree);//////明文必须初始化
+    Plaintext pt1=seal::Plaintext(poly_modulus_degree);////
     Plaintext pt2=seal::Plaintext(poly_modulus_degree);
     Plaintext pt3=seal::Plaintext(poly_modulus_degree);
     pt1.set_zero();
@@ -144,23 +147,24 @@ int main()
     pt1[0] = 1;
     pt1[1] = 2;
     pt2[0] = 10;
+    /*
     for(size_t i = 1; i < 40; ++i) 
         pt2[i] = i;
     pt2[poly_modulus_degree / 2] = 2;
+    */
     
-    Ciphertext ct;
+    Ciphertext ct(context), res_ct(context);
 
-
+	Timer timer;
     encryptor.encrypt_symmetric(pt1, ct);
-    evaluator.transform_to_ntt_inplace(ct);
-    Ciphertext tmp(ct);
-    Timer timer;
-    BFV_galois_inplace_ntt(context, ct, 5, galois_keys, pool);
     timer.StopWatch();
-    evaluator.transform_from_ntt_inplace(ct);
+    seal::HalfCipher half_c0(ct), half_c1(ct, 1);
     timer.StopWatch();
-    evaluator.apply_galois_inplace(ct, 5, galois_keys, pool);
+    multiply_plain_normal_inplace(context_data, half_c0, pt2);
     timer.StopWatch();
+    multiply_plain_normal_inplace(context_data, half_c1, pt2);
+    timer.StopWatch();
+    seal::ComposeCipher(half_c0, half_c1, res_ct);
 /*
     {
     vector<LWECT> lwe;
@@ -171,11 +175,11 @@ int main()
     }
 */
  //   cout << "-------LWEs Convert To RLWE----------\n";
-    decryptor.decrypt(ct,pt3);
+   decryptor.decrypt(res_ct, pt3);
     std::string temp_s = pt3.to_string();
-    //if(temp_s.length() > 20)
-    //    cout << "too long\n";
-    //else
+    if(temp_s.length() > 20)
+        cout << "too long\n";
+    else
         cout << "Correct Result " << temp_s << '\n';
 
     return 0;
