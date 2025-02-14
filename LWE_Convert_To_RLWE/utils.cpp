@@ -385,10 +385,12 @@ void switch_key_inplace_ntt(const seal::SEALContext &context, seal::Ciphertext &
                 SEAL_ALLOCATE_GET_COEFF_ITER(t_ntt, coeff_count, pool);
                 ConstCoeffIter t_operand;
 
+                // RNS-NTT form exists in input
                 if (I == J)
                 {
                     t_operand = target_iter[J];
                 }
+                // Perform RNS-NTT conversion
                 else
                 {
                     // No need to perform RNS conversion (modular reduction)
@@ -508,6 +510,8 @@ void switch_key_inplace_ntt(const seal::SEALContext &context, seal::Ciphertext &
                         qi_lazy = qi << 2;
 #endif
                     }
+                    //inverse_ntt_negacyclic_harvey_lazy(get<0, 1>(J), get<2>(J));
+
 
                     // ((ct mod qi) - (ct mod qk)) mod qi with output in [0, 2 * qi_lazy)
                     SEAL_ITERATE(
@@ -518,4 +522,38 @@ void switch_key_inplace_ntt(const seal::SEALContext &context, seal::Ciphertext &
                     add_poly_coeffmod(get<0, 1>(J), get<0, 0>(J), coeff_count, get<1>(J), get<0, 0>(J));
                 });
         });
+}
+
+BaseDecompose::BaseDecompose(const std::uint64_t &oz, const seal::Modulus &oq)
+:z(oz), q(oq)
+{
+  std::uint64_t qv = q.value();
+  std::uint64_t z_power = 1;
+  while(1 <= qv)
+  {
+    gz.push_back(z_power);
+    z_power *= z;
+    qv /= z;
+  }
+}
+
+std::vector<std::uint64_t> BaseDecompose::Decompose(std::uint64_t x)
+{
+  std::uint64_t t = gz.size();
+  std::vector<std::uint64_t> a(t);
+  const std::uint64_t half_z = z >> 1;
+  for(int i = t - 1; i >= 0; --i)
+  {
+    a[i] = x / gz[i];
+    x -= a[i] * gz[i];
+  }
+  for(size_t i = 0; i < t; ++i)
+  {
+    if(a[i] > half_z)
+    {
+      a[i + 1] += 1;
+      a[i] = q.value() - z + a[i];
+    }
+  }
+  return a;
 }

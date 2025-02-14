@@ -87,3 +87,17 @@ inline void BFV_galois_inplace_ntt(const seal::SEALContext &context, seal::Ciphe
                         GaloisKeys::get_index(galois_elt), pool);
 
 }
+
+class BaseDecompose
+{
+public:
+    BaseDecompose(const std::uint64_t &oz, const seal::Modulus &oq);
+
+//the result is assumed to be in (-z/2, z/2]
+    std::vector<std::uint64_t> Decompose(std::uint64_t x);
+
+//z is the base. t = floor(log_z(q)) + 1 <= 56.
+    std::uint64_t z;
+    seal::Modulus q;
+    std::vector<std::uint64_t> gz;
+};

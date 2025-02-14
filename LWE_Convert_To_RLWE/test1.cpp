@@ -1,12 +1,14 @@
 
 #include <iostream>
-#include <future>
+#include <sstream>
 #include "seal/seal.h"
 #include "lweCipherText.h"
 #include "lweDecryptor.hpp"
 #include "lweSecretKey.hpp"
 #include "utils.h"
 #include "HalfCipher.h"
+#include "GSW.h"
+#include <unistd.h>
 
 using namespace std;
 using namespace seal;
@@ -101,7 +103,6 @@ int main()
 
     auto context_data = context.first_context_data();
     auto galois_tool = context_data->galois_tool();
-    size_t first_coeff_modulus_size = num_modulus - 1;
 
     print_parameters(context);
     cout << endl;
@@ -129,12 +130,13 @@ int main()
     LWE_Key_ConvertTo_RLWE_Key(context, lwe_key, new_RLWE_key);//从LWE key到RLWE key
     Encryptor encryptor_new(context, new_RLWE_key);
     Decryptor decryptor_new(context, new_RLWE_key);
+
+    GSW(context, new_RLWE_key);
+
     seal::KeyGenerator RLWE_key_generator(context, new_RLWE_key);//定义密钥生成器
-    seal::RelinKeys relin_keys;
-    RLWE_key_generator.create_relin_keys(relin_keys);
     
     seal::GaloisKeys galois_keys;
-    Prepare_Galois(context, keygen, galois_keys);
+    Prepare_Galois(context, RLWE_key_generator, galois_keys);
 
     Packer packer(context, 2);
 
@@ -147,40 +149,28 @@ int main()
     pt1[0] = 1;
     pt1[1] = 2;
     pt2[0] = 10;
-    /*
-    for(size_t i = 1; i < 40; ++i) 
-        pt2[i] = i;
-    pt2[poly_modulus_degree / 2] = 2;
-    */
     
     Ciphertext ct(context), res_ct(context);
 
-	Timer timer;
     encryptor.encrypt_symmetric(pt1, ct);
-    timer.StopWatch();
-    seal::HalfCipher half_c0(ct), half_c1(ct, 1);
-    timer.StopWatch();
-    multiply_plain_normal_inplace(context_data, half_c0, pt2);
-    timer.StopWatch();
-    multiply_plain_normal_inplace(context_data, half_c1, pt2);
-    timer.StopWatch();
-    seal::ComposeCipher(half_c0, half_c1, res_ct);
-/*
-    {
-    vector<LWECT> lwe;
-    LWECT ct_lwe(ct, 0, context), ct_lwe1(ct, 1, context);
-    lwe.push_back(ct_lwe);
-    lwe.push_back(ct_lwe1);
-    packer.LWEs_ConvertTo_RLWE_Without_EvalTr(context, lwe, ct, galois_keys);
-    }
-*/
- //   cout << "-------LWEs Convert To RLWE----------\n";
-   decryptor.decrypt(res_ct, pt3);
+ 
+   decryptor.decrypt(ct, pt3);
     std::string temp_s = pt3.to_string();
     if(temp_s.length() > 20)
         cout << "too long\n";
     else
         cout << "Correct Result " << temp_s << '\n';
+
+    BaseDecompose BD(2, moduli[0]);
+    auto V = BD.Decompose( 1);
+    size_t len = V.size();
+    std::uint64_t x = 0;
+    for(size_t i = 0; i < len; ++i)
+    {
+        x = seal::util::multiply_add_uint_mod(V[i], BD.gz[i], x, BD.q);
+    }
+
+    std::cout << "x = " << x << "\n";
 
     return 0;
 }
