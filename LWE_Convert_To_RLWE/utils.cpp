@@ -524,35 +524,60 @@ void switch_key_inplace_ntt(const seal::SEALContext &context, seal::Ciphertext &
         });
 }
 
-BaseDecompose::BaseDecompose(const std::uint64_t &oz, const seal::Modulus &oq)
-:z(oz), q(oq)
+BaseDecompose::BaseDecompose(const seal::SEALContext &context, const std::uint64_t oz)
+:z(oz), t(0)
 {
-  std::uint64_t qv = q.value();
-  std::uint64_t z_power = 1;
-  while(1 <= qv)
+  context_data = context.first_context_data();
+  auto &parms = context_data->parms();
+  size_t coeff_modulus_size = parms.coeff_modulus().size();
+  const std::uint64_t *q = context_data->total_coeff_modulus();
+  std::uint64_t quotient[coeff_modulus_size] = {0}, remainder[coeff_modulus_size] = {0};
+  std::uint64_t numerator[coeff_modulus_size] = {0};
+  std::copy_n(q, coeff_modulus_size, numerator);
+  seal::MemoryPoolHandle pool = seal::MemoryManager::GetPool();
+  while(seal::util::get_significant_bit_count_uint(numerator, coeff_modulus_size) > 0)
   {
-    gz.push_back(z_power);
-    z_power *= z;
-    qv /= z;
+    seal::util::divide_uint(numerator, &z, coeff_modulus_size, quotient, remainder, pool);
+    ++t;
+    std::copy_n(quotient, coeff_modulus_size, numerator);
   }
 }
 
-std::vector<std::uint64_t> BaseDecompose::Decompose(std::uint64_t x)
+std::vector<std::uint64_t> BaseDecompose::Decompose(const std::uint64_t *x, std::uint64_t uint64_count)
 {
-  std::uint64_t t = gz.size();
-  std::vector<std::uint64_t> a(t);
   const std::uint64_t half_z = z >> 1;
-  for(int i = t - 1; i >= 0; --i)
+  auto &parms = context_data->parms();
+  auto &coeff_modulus = parms.coeff_modulus();
+  size_t coeff_modulus_size = coeff_modulus.size();
+  std::vector<std::uint64_t> a(t * coeff_modulus_size);
+  seal::MemoryPoolHandle pool = seal::MemoryManager::GetPool();
+  
+  std::uint64_t quotient[coeff_modulus_size] = {0}, remainder[coeff_modulus_size] = {0};
+  std::uint64_t numerator[coeff_modulus_size] = {0};
+  std::copy_n(x, coeff_modulus_size, numerator);
+  for(size_t i = 0; i < t; ++i)
   {
-    a[i] = x / gz[i];
-    x -= a[i] * gz[i];
+    seal::util::divide_uint(numerator, &z, coeff_modulus_size, quotient, remainder, pool);
+    std::copy_n(quotient, coeff_modulus_size, numerator);
+    a[i] = remainder[0];
   }
+
   for(size_t i = 0; i < t; ++i)
   {
     if(a[i] > half_z)
     {
+#ifdef DEBUG
+      if(i == t - 1) std::cout << "Overflow warning a[i] =" << a[i] << "\n";
+#endif
       a[i + 1] += 1;
-      a[i] = q.value() - z + a[i];
+      std::uint64_t temp = z - a[i];
+      for(size_t j = 0; j < coeff_modulus_size; ++j)
+        a[i + j * t] = coeff_modulus[j].value() - temp;
+    }
+    else
+    {
+      for(size_t j = 1; j < coeff_modulus_size; ++j)
+        a[i + j * t] = a[i];
     }
   }
   return a;

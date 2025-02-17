@@ -7,7 +7,7 @@
 #include "lweSecretKey.hpp"
 #include "utils.h"
 #include "HalfCipher.h"
-#include "GSW.h"
+//#include "GSW.h"
 #include <unistd.h>
 
 using namespace std;
@@ -62,6 +62,11 @@ inline void print_parameters(const seal::SEALContext &context)
     {
         std::cout << "|   plain_modulus: " << context_data.parms().plain_modulus().value() << std::endl;
     }
+
+    auto first_context_data = context.first_context_data();
+    coeff_modulus = first_context_data->parms().coeff_modulus();
+    coeff_modulus_size = coeff_modulus.size();
+    std::cout << "First context data coefficient modulus size = " << coeff_modulus_size << "\n";
 
     auto cnt_data = context.key_context_data();
     std::cout << "context parms_id:\n";
@@ -131,7 +136,7 @@ int main()
     Encryptor encryptor_new(context, new_RLWE_key);
     Decryptor decryptor_new(context, new_RLWE_key);
 
-    GSW(context, new_RLWE_key);
+    //GSW gsw(context, new_RLWE_key, 1024);
 
     seal::KeyGenerator RLWE_key_generator(context, new_RLWE_key);//定义密钥生成器
     
@@ -161,16 +166,17 @@ int main()
     else
         cout << "Correct Result " << temp_s << '\n';
 
-    BaseDecompose BD(2, moduli[0]);
-    auto V = BD.Decompose( 1);
-    size_t len = V.size();
-    std::uint64_t x = 0;
-    for(size_t i = 0; i < len; ++i)
+    BaseDecompose BD(context, 2048);
+    cout << "BD.t = " << BD.t << "\n";
+    for(uint64_t tv = moduli[0].value() - 10; tv < moduli[0].value(); ++tv)
     {
-        x = seal::util::multiply_add_uint_mod(V[i], BD.gz[i], x, BD.q);
+        uint64_t x{0};
+        vector<uint64_t> V = BD.Decompose(&tv, 1);
+        for(int i = BD.t - 1; i >= 0; --i)
+        {
+            x = seal::util::multiply_add_uint_mod(x, BD.z, V[i], moduli[0]);
+        }
+        if(x != tv) cout << "wrong " << tv << "\n";
     }
-
-    std::cout << "x = " << x << "\n";
-
     return 0;
 }

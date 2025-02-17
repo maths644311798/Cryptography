@@ -88,16 +88,23 @@ inline void BFV_galois_inplace_ntt(const seal::SEALContext &context, seal::Ciphe
 
 }
 
+/*
+Assume the base z is smaller than any modulus qi
+*/
 class BaseDecompose
 {
 public:
-    BaseDecompose(const std::uint64_t &oz, const seal::Modulus &oq);
+    BaseDecompose(const seal::SEALContext &context, const std::uint64_t oz = 2048);
 
-//the result is assumed to be in (-z/2, z/2]
-    std::vector<std::uint64_t> Decompose(std::uint64_t x);
+/* 
+x is in binary form. The result is assumed to be in (-z/2, z/2].
+Turning to the RNS, the result vector has size t * coeff_modulus_size.
+*/
+    std::vector<std::uint64_t> Decompose(const std::uint64_t *x, std::uint64_t uint64_count);
 
 //z is the base. t = floor(log_z(q)) + 1 <= 56.
-    std::uint64_t z;
-    seal::Modulus q;
-    std::vector<std::uint64_t> gz;
+//Require 2q < z^t
+    std::uint64_t z{2048}, t{0};
+//We only consider first_context_data now.
+    std::shared_ptr<const seal::SEALContext::ContextData> context_data;
 };
