@@ -1,11 +1,170 @@
 //GSW.cpp
 #include "GSW.h"
+#include <seal/util/scalingvariant.h>
 
-GSW::GSW(const seal::SEALContext &context, seal::SecretKey sk)
-:context_(context) ,sk_(sk)
+GSW::GSW(const seal::SEALContext &context, const seal::SecretKey &sk, const std::size_t z)
+:context_(context) ,sk_(sk), BD(context, z), m(BD.t << 1)
 {
-    auto &parms = context_.key_context_data()->parms();
+    auto &parms = context_.first_context_data()->parms();
     coeff_modulus_ = parms.coeff_modulus();
     poly_modulus_degree_ = parms.poly_modulus_degree();
     plain_modulus_ = parms.plain_modulus();
+    parms_id_ = context.first_context_data()->parms_id();
+    //std::size_t coeff_modulus_size = coeff_modulus_.size();
+}
+
+void GSW::encrypt(const seal::Plaintext &plain, std::vector<std::uint64_t> &destination, bool is_ntt_form) const
+{
+    std::size_t coeff_modulus_size = coeff_modulus_.size();
+    size_t poly_uint64_count = seal::util::mul_safe(poly_modulus_degree_, coeff_modulus_size);
+    seal::Plaintext plain_q(poly_uint64_count, poly_uint64_count);
+    //plain_q.set_zero();
+    seal::util::multiply_add_plain_with_scaling_variant(plain, *BD.context_data, 
+                                                seal::util::RNSIter(plain_q.data(), poly_modulus_degree_));
+    encrypt_zero(destination, false);
+#ifdef DEBUG
+    std::cout << "encrypt_zero success\n";
+#endif
+    std::vector<std::uint64_t> tmp(poly_uint64_count);
+    std::copy_n(plain_q.data(), poly_uint64_count, tmp.data());
+    for(std::size_t i = 0; i < BD.t; ++i)
+    {
+        std::uint64_t *c_up = destination.data() + i * poly_uint64_count; 
+        std::uint64_t *c_down = c_up + (m + BD.t) * poly_uint64_count;
+        seal::util::add_poly_coeffmod(seal::util::ConstRNSIter(c_up, poly_modulus_degree_), 
+                                    seal::util::ConstRNSIter(tmp.data(), poly_modulus_degree_), 
+                                    coeff_modulus_size, coeff_modulus_.data(), 
+                                    seal::util::RNSIter(c_up, poly_modulus_degree_));
+        seal::util::add_poly_coeffmod(seal::util::ConstRNSIter(c_down, poly_modulus_degree_), 
+                                    seal::util::ConstRNSIter(tmp.data(), poly_modulus_degree_), 
+                                    coeff_modulus_size, coeff_modulus_.data(), 
+                                    seal::util::RNSIter(c_down, poly_modulus_degree_));
+        if(i == BD.t - 1) break;
+        for(std::size_t j = 0; j < coeff_modulus_size; ++j)
+        {
+            seal::util::multiply_poly_scalar_coeffmod(tmp.data() + j * poly_modulus_degree_, 
+                                                    poly_modulus_degree_, BD.z, coeff_modulus_[j], 
+                                                    tmp.data() + j * poly_modulus_degree_);
+        }
+    }
+    if(is_ntt_form)
+    {
+        auto ntt_tables = iter(BD.context_data->small_ntt_tables());
+        for(std::size_t i = 0; i <(m << 1); ++i)
+        {
+            seal::util::ntt_negacyclic_harvey(
+                seal::util::RNSIter(destination.data() + i * poly_uint64_count, poly_modulus_degree_), 
+                coeff_modulus_size, ntt_tables);
+        }
+    }
+}
+
+void GSW::encrypt_zero(std::vector<std::uint64_t> &destination, bool is_ntt_form) const
+{
+    seal::MemoryPoolHandle pool = seal::MemoryManager::GetPool(seal::mm_prof_opt::mm_force_new, true);
+    auto &context_data = *context_.get_context_data(parms_id_);
+    auto &parms = context_data.parms();
+    auto &coeff_modulus = parms.coeff_modulus();
+    auto &plain_modulus = parms.plain_modulus();
+    std::size_t coeff_modulus_size = coeff_modulus.size();
+    auto ntt_tables = context_data.small_ntt_tables();
+
+    size_t poly_uint64_count = seal::util::mul_safe(poly_modulus_degree_, coeff_modulus_size);
+
+    destination.resize((m << 1) * poly_uint64_count);
+#ifdef DEBUG
+    std::cout << "ciphtext resize success\n";
+#endif
+
+    auto bootstrap_prng = parms.random_generator()->create();
+    seal::prng_seed_type public_prng_seed;
+    bootstrap_prng->generate(seal::prng_seed_byte_count, reinterpret_cast<seal::seal_byte *>(public_prng_seed.data()));
+    auto ciphertext_prng = seal::UniformRandomGeneratorFactory::DefaultFactory()->create(public_prng_seed);
+
+    uint64_t *c0 = destination.data();
+    uint64_t *c1 = destination.data() + m * poly_uint64_count;
+    for(std::size_t j = 0; j < m; ++j)
+    {
+//c1 is uniform in NTT form and non-NTT form, the result of the sampling should be regarded in NTT form
+        seal::util::sample_poly_uniform(ciphertext_prng, parms, c1);
+
+        auto noise(seal::util::allocate_poly(poly_modulus_degree_, coeff_modulus_size, pool));
+        std::uint64_t *noise_ptr = noise.get();
+        seal::RandomToStandardAdapter engine(bootstrap_prng);
+        std::normal_distribution<double> normal_(0, seal::util::global_variables::noise_standard_deviation);
+        for(std::size_t i = 0; i < coeff_modulus_size; ++i)
+            for(std::size_t k = 0; k < poly_modulus_degree_; ++k)
+        {
+            int64_t value = static_cast<int64_t>(normal_(engine));
+            uint64_t flag = static_cast<uint64_t>(-static_cast<int64_t>(value < 0));
+            noise_ptr[i * poly_modulus_degree_ + k] = static_cast<uint64_t>(value) + (flag & coeff_modulus_[i].value());
+        }
+
+        //Calculate -(as+ e) (mod q) and store in c[0]
+        for (size_t i = 0; i < coeff_modulus_size; i++)
+        {
+             seal::util::dyadic_product_coeffmod(sk_.data().data() + i * poly_modulus_degree_, 
+                                    c1 + i * poly_modulus_degree_, poly_modulus_degree_, coeff_modulus_[i],
+                                    c0 + i * poly_modulus_degree_);
+            if (is_ntt_form)
+            {
+                seal::util::ntt_negacyclic_harvey(noise_ptr + i * poly_modulus_degree_, ntt_tables[i]);
+            }
+            else
+            {
+                seal::util::inverse_ntt_negacyclic_harvey(c0 + i * poly_modulus_degree_, ntt_tables[i]);
+            }
+            seal::util::add_poly_coeffmod(noise_ptr + i * poly_modulus_degree_, c0 + i * poly_modulus_degree_, 
+                                        poly_modulus_degree_, coeff_modulus[i], c0 + i * poly_modulus_degree_);
+            seal::util::negate_poly_coeffmod(c0 + i * poly_modulus_degree_, poly_modulus_degree_, 
+                                            coeff_modulus[i], c0 + i * poly_modulus_degree_);
+        }
+        if (!is_ntt_form)
+        {
+            for (size_t i = 0; i < coeff_modulus_size; i++)
+            {
+                seal::util::inverse_ntt_negacyclic_harvey(c1 + i * poly_modulus_degree_, ntt_tables[i]);
+            }
+        }
+        c0 = c0 + poly_uint64_count;
+        c1 = c1 + poly_uint64_count;
+    }
+}
+
+void GSW::decrypt(const std::vector<std::uint64_t> &cipher, seal::Plaintext &plain) const
+{
+    seal::MemoryPoolHandle pool = seal::MemoryManager::GetPool(seal::mm_prof_opt::mm_force_new, true);
+    auto &parms = BD.context_data->parms();
+    size_t coeff_modulus_size = coeff_modulus_.size();
+    size_t poly_uint64_count = seal::util::mul_safe(poly_modulus_degree_, coeff_modulus_size);
+    auto ntt_tables = BD.context_data->small_ntt_tables();
+
+    std::vector<uint64_t> tmp_dest_modq(poly_uint64_count);
+    //dot_product_ct_sk
+    const std::uint64_t *sk_ptr = sk_.data().data();
+    const std::uint64_t *c0 = cipher.data(), *c1 = c0 + m * poly_uint64_count;
+    for(size_t i = 0; i < coeff_modulus_size; ++i)
+    {
+        seal::util::dyadic_product_coeffmod(c1 + i * poly_modulus_degree_, sk_ptr + i * poly_modulus_degree_, 
+                                        poly_modulus_degree_, coeff_modulus_[i], 
+                                        tmp_dest_modq.data() + i * poly_modulus_degree_);
+        seal::util::add_poly_coeffmod(tmp_dest_modq.data() + i * poly_modulus_degree_, c0 + i * poly_modulus_degree_, 
+                        poly_modulus_degree_, coeff_modulus_[i], tmp_dest_modq.data() + i * poly_modulus_degree_);
+        //Back to non-NTT form
+        seal::util::inverse_ntt_negacyclic_harvey(tmp_dest_modq.data() + i * poly_modulus_degree_, ntt_tables[i]);
+    }
+
+    plain.parms_id() = seal::parms_id_zero;
+    plain.resize(poly_modulus_degree_);
+
+    BD.context_data->rns_tool()->decrypt_scale_and_round(
+                                            seal::util::ConstRNSIter(tmp_dest_modq.data(), poly_modulus_degree_), 
+                                            plain.data(), pool);
+}
+
+std::ostream &operator<<(std::ostream &os, const GSW& gsw)
+{
+    os << "GSW parameter:\n";
+    os << "m = " << gsw.m << "\n";
+    return os;
 }

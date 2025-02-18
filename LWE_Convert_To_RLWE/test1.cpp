@@ -7,7 +7,7 @@
 #include "lweSecretKey.hpp"
 #include "utils.h"
 #include "HalfCipher.h"
-//#include "GSW.h"
+#include "GSW.h"
 #include <unistd.h>
 
 using namespace std;
@@ -127,6 +127,7 @@ int main()
     Evaluator evaluator(context);
     Decryptor decryptor(context, secret_key);
 
+    GSW gsw(context, secret_key, 2048);
 /* 为了做lwes到RLWE*/
     lweSecretKey lwe_key(secret_key, context);
     SecretKey new_RLWE_key = seal::SecretKey(secret_key);
@@ -145,38 +146,63 @@ int main()
 
     Packer packer(context, 2);
 
-    Plaintext pt1=seal::Plaintext(poly_modulus_degree);////
-    Plaintext pt2=seal::Plaintext(poly_modulus_degree);
-    Plaintext pt3=seal::Plaintext(poly_modulus_degree);
+    Plaintext pt1 = seal::Plaintext(poly_modulus_degree);////
+    Plaintext pt2 = seal::Plaintext(poly_modulus_degree);
+    Plaintext pt3 = seal::Plaintext(poly_modulus_degree);
     pt1.set_zero();
     pt2.set_zero();
-    pt3.set_zero();
-    pt1[0] = 1;
-    pt1[1] = 2;
+    pt1[0] = 0x1FFF;
+    pt1[1] = 0x2121;
     pt2[0] = 10;
-    
-    Ciphertext ct(context), res_ct(context);
 
+/*Verify BFV*/
+    Ciphertext ct(context), res_ct(context);
     encryptor.encrypt_symmetric(pt1, ct);
- 
    decryptor.decrypt(ct, pt3);
     std::string temp_s = pt3.to_string();
     if(temp_s.length() > 20)
         cout << "too long\n";
     else
-        cout << "Correct Result " << temp_s << '\n';
+        cout << "BFV Correct Result " << temp_s << '\n';
 
-    BaseDecompose BD(context, 2048);
-    cout << "BD.t = " << BD.t << "\n";
-    for(uint64_t tv = moduli[0].value() - 10; tv < moduli[0].value(); ++tv)
+/*Verify the BaseDecomposition*/
+    cout << "BD.t = " << gsw.BD.t << "\n";
+    for(uint64_t tv = moduli[0].value() - 1024; tv < moduli[0].value(); ++tv)
     {
         uint64_t x{0};
-        vector<uint64_t> V = BD.Decompose(&tv, 1);
-        for(int i = BD.t - 1; i >= 0; --i)
+        vector<uint64_t> V = gsw.BD.Decompose(&tv, 1);
+        for(int i = gsw.BD.t - 1; i >= 0; --i)
         {
-            x = seal::util::multiply_add_uint_mod(x, BD.z, V[i], moduli[0]);
+            x = seal::util::multiply_add_uint_mod(x, gsw.BD.z, V[i], moduli[0]);
         }
         if(x != tv) cout << "wrong " << tv << "\n";
     }
+
+/*Verify GSW*/
+    cout << "Verify GSW\n";
+    vector<uint64_t> vec_ct;
+    for(size_t i = 0; i < 256; ++i)
+    {
+        gsw.encrypt_zero(vec_ct, true);
+        gsw.decrypt(vec_ct, pt3);
+        if(!pt3.is_zero())
+        {
+            temp_s = pt3.to_string();
+            cout << "GSW decrypt error. pt is not zero, but\n" << temp_s << "\n";
+        }
+    }
+
+    for(size_t i = 0; i < 256; ++i)
+    {
+        gsw.encrypt(pt1, vec_ct, true);
+        gsw.decrypt(vec_ct, pt3);
+        if(!std::equal(pt3.data(), pt3.data() + poly_modulus_degree, pt1.data(),
+                       pt1.data() + poly_modulus_degree)) 
+        {
+            temp_s = pt3.to_string();
+            cout << "GSW decrypt error. pt3 != pt1, pt3 = \n" << temp_s << "\n";
+        }
+    }
+
     return 0;
 }
