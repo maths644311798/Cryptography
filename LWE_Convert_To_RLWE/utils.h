@@ -100,7 +100,7 @@ public:
 x is in binary form. The result is assumed to be in (-z/2, z/2].
 Turning to the RNS, the result vector has size t * coeff_modulus_size.
 */
-    std::vector<std::uint64_t> Decompose(const std::uint64_t *x, std::uint64_t uint64_count);
+    std::vector<std::uint64_t> Decompose(const std::uint64_t *x, std::uint64_t uint64_count) const;
 
 //z is the base. t = floor(log_z(q)) + 1 <= 56.
 //Require 2q < z^t

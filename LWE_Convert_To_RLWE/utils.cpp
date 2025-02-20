@@ -543,7 +543,7 @@ BaseDecompose::BaseDecompose(const seal::SEALContext &context, const std::uint64
   }
 }
 
-std::vector<std::uint64_t> BaseDecompose::Decompose(const std::uint64_t *x, std::uint64_t uint64_count)
+std::vector<std::uint64_t> BaseDecompose::Decompose(const std::uint64_t *x, std::uint64_t uint64_count) const
 {
   const std::uint64_t half_z = z >> 1;
   auto &parms = context_data->parms();

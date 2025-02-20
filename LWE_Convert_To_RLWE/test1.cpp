@@ -127,41 +127,43 @@ int main()
     Evaluator evaluator(context);
     Decryptor decryptor(context, secret_key);
 
-    GSW gsw(context, secret_key, 2048);
-/* 为了做lwes到RLWE*/
+    GSW gsw(context, secret_key, 0x0800);
+/* 为了做lwes到RLWE
     lweSecretKey lwe_key(secret_key, context);
     SecretKey new_RLWE_key = seal::SecretKey(secret_key);
     
-
-    LWE_Key_ConvertTo_RLWE_Key(context, lwe_key, new_RLWE_key);//从LWE key到RLWE key
+    //从LWE key到RLWE key
+    LWE_Key_ConvertTo_RLWE_Key(context, lwe_key, new_RLWE_key);
     Encryptor encryptor_new(context, new_RLWE_key);
     Decryptor decryptor_new(context, new_RLWE_key);
 
     //GSW gsw(context, new_RLWE_key, 1024);
 
-    seal::KeyGenerator RLWE_key_generator(context, new_RLWE_key);//定义密钥生成器
+    //定义密钥生成器
+    seal::KeyGenerator RLWE_key_generator(context, new_RLWE_key);
     
     seal::GaloisKeys galois_keys;
     Prepare_Galois(context, RLWE_key_generator, galois_keys);
 
     Packer packer(context, 2);
+*/
 
     Plaintext pt1 = seal::Plaintext(poly_modulus_degree);////
     Plaintext pt2 = seal::Plaintext(poly_modulus_degree);
     Plaintext pt3 = seal::Plaintext(poly_modulus_degree);
     pt1.set_zero();
     pt2.set_zero();
-    pt1[0] = 0x1FFF;
-    pt1[1] = 0x2121;
-    pt2[0] = 10;
+    pt1[0] = 0x10;
+    pt1[1] = 0x00;
+    pt2[0] = 0x01;
 
 /*Verify BFV*/
     Ciphertext ct(context), res_ct(context);
     encryptor.encrypt_symmetric(pt1, ct);
-   decryptor.decrypt(ct, pt3);
+    decryptor.decrypt(ct, pt3);
     std::string temp_s = pt3.to_string();
     if(temp_s.length() > 20)
-        cout << "too long\n";
+        cout << "Error: too long\n";
     else
         cout << "BFV Correct Result " << temp_s << '\n';
 
@@ -181,7 +183,7 @@ int main()
 /*Verify GSW*/
     cout << "Verify GSW\n";
     vector<uint64_t> vec_ct;
-    for(size_t i = 0; i < 256; ++i)
+/*
     {
         gsw.encrypt_zero(vec_ct, true);
         gsw.decrypt(vec_ct, pt3);
@@ -192,7 +194,6 @@ int main()
         }
     }
 
-    for(size_t i = 0; i < 256; ++i)
     {
         gsw.encrypt(pt1, vec_ct, true);
         gsw.decrypt(vec_ct, pt3);
@@ -203,6 +204,15 @@ int main()
             cout << "GSW decrypt error. pt3 != pt1, pt3 = \n" << temp_s << "\n";
         }
     }
-
+*/
+    vector<uint64_t> plain_q(poly_modulus_degree * (context.first_context_data()->parms().coeff_modulus().size()));
+    plain_q[0] = 0xA1;
+    plain_q[1] = 0xB3;
+    gsw.encode(plain_q, vec_ct, true);
+    encryptor.encrypt(pt2, ct);
+    gsw.MultiplyBFV(vec_ct, ct, res_ct);
+    decryptor.decrypt(res_ct, pt3);
+    temp_s = pt3.to_string();
+    cout << "temp_s = " << temp_s << "\n";
     return 0;
 }

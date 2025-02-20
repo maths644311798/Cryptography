@@ -29,8 +29,27 @@ The encryption will allocate memory for the ciphertext.
 */
     void encrypt(const seal::Plaintext &plain, std::vector<std::uint64_t> &destination, bool is_ntt_form = true) const;
     void encrypt_zero(std::vector<std::uint64_t> &destination, bool is_ntt_form = true) const;
+    inline std::vector<std::uint64_t> encrypt(const seal::Plaintext &plain, bool is_ntt_form = true) const
+    {
+        std::vector<std::uint64_t> destination;
+        encrypt(plain, destination, is_ntt_form);
+        return destination;
+    }
 
+/*
+plain_q should be in R_q in the first context data
+*/
+    void encode(const std::vector<std::uint64_t> &plain_q, std::vector<std::uint64_t> &destination, 
+                bool is_ntt_form = true) const;
+
+/*
+The decryption will allocate memory for the plaintext.
+*/
     void decrypt(const std::vector<std::uint64_t> &cipher, seal::Plaintext &plain) const;
+
+/*BFV ciphertext is in non-NTT form. The result ciphertext is in non-NTT form*/
+    void MultiplyBFV(const std::vector<std::uint64_t> &GSW_cipher, const seal::Ciphertext &BFV_cipher, 
+                            seal::Ciphertext &destination) const;
 
     seal::SEALContext context_;
     seal::SecretKey sk_;
