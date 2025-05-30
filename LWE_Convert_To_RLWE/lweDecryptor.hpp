@@ -9,7 +9,7 @@ private:
 	seal::SEALContext context_;
     
 public:
-	lweDecryptor(const lweSecretKey& sk, const seal::SEALContext& context)
+	lweDecryptor(const seal::SEALContext& context, const lweSecretKey& sk)
 		: sk_(sk), context_(context){
             // Seal's copy constructor is enough
         };

@@ -14,7 +14,7 @@ add_executable(Server Server.cpp utils.cpp)
 add_executable(Client Client.cpp utils.cpp)
 add_executable(test1 test1.cpp lweCipherText.cpp utils.cpp HalfCipher.cpp GSW.cpp)
 # Import Microsoft SEAL
-find_package(SEAL 4.1 REQUIRED)
+find_package(SEAL REQUIRED)
 
 # Link Microsoft SEAL
 #target_link_libraries(test SEAL::seal)

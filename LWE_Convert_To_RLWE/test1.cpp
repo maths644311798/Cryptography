@@ -127,47 +127,71 @@ int main()
     Evaluator evaluator(context);
     Decryptor decryptor(context, secret_key);
 
-    GSW gsw(context, secret_key, 0x0800);
-/* 为了做lwes到RLWE
+    GSW gsw(context, secret_key, 0x2000);
     lweSecretKey lwe_key(secret_key, context);
+    Packer packer(context, 4);
+/*lwes to RLWE */
     SecretKey new_RLWE_key = seal::SecretKey(secret_key);
     
-    //从LWE key到RLWE key
     LWE_Key_ConvertTo_RLWE_Key(context, lwe_key, new_RLWE_key);
     Encryptor encryptor_new(context, new_RLWE_key);
     Decryptor decryptor_new(context, new_RLWE_key);
 
-    //GSW gsw(context, new_RLWE_key, 1024);
-
-    //定义密钥生成器
     seal::KeyGenerator RLWE_key_generator(context, new_RLWE_key);
     
     seal::GaloisKeys galois_keys;
     Prepare_Galois(context, RLWE_key_generator, galois_keys);
-
-    Packer packer(context, 2);
-*/
 
     Plaintext pt1 = seal::Plaintext(poly_modulus_degree);////
     Plaintext pt2 = seal::Plaintext(poly_modulus_degree);
     Plaintext pt3 = seal::Plaintext(poly_modulus_degree);
     pt1.set_zero();
     pt2.set_zero();
-    pt1[0] = 0x10;
-    pt1[1] = 0x00;
-    pt2[0] = 0x01;
+    pt1[0] = 0x01;
+    pt1[1] = 0x01;
+    pt1[2] = 0x01;
+    pt2[0] = 0x02;
 
-/*Verify BFV*/
     Ciphertext ct(context), res_ct(context);
-    encryptor.encrypt_symmetric(pt1, ct);
-    decryptor.decrypt(ct, pt3);
-    std::string temp_s = pt3.to_string();
-    if(temp_s.length() > 20)
-        cout << "Error: too long\n";
-    else
-        cout << "BFV Correct Result " << temp_s << '\n';
+/*Verify BFV*/
+    {
+        encryptor.encrypt_symmetric(pt1, ct);
+        decryptor.decrypt(ct, pt3);
+        std::string temp_s = pt3.to_string();
+        if(temp_s.length() > 20)
+            cout << "Error: too long\n";
+        else
+            cout << "BFV Correct Result " << temp_s << '\n';
+    }
 
-/*Verify the BaseDecomposition*/
+/*Verify LWE*/
+    {
+        encryptor.encrypt_symmetric(pt1, ct);
+        LWECT lwe_ct(context, ct, 0);
+        lweDecryptor lwe_decrytor(context, lwe_key);
+        std::vector<uint64_t> res_pt = lwe_decrytor.DoDecrypt(lwe_ct);
+        cout << "LWE Correct Result " << res_pt[0] << '\n';
+    }
+
+/* Verify Pack */
+    {
+        vector<LWECT> lwe_cts(4);
+        vector<Ciphertext> BFV_cts(2);
+        encryptor.encrypt_symmetric(pt1, BFV_cts[0]);
+        encryptor.encrypt_symmetric(pt2, BFV_cts[1]);
+        lwe_cts[0] = LWECT(context, BFV_cts[0], 0);
+        lwe_cts[1] = LWECT(context, BFV_cts[0], 1);
+        lwe_cts[2] = LWECT(context, BFV_cts[0], 2);
+        lwe_cts[3] = LWECT(context, BFV_cts[1], 0);
+        packer.LWEs_ConvertTo_RLWE(context, lwe_cts, res_ct, galois_keys);
+        decryptor_new.decrypt(res_ct, pt3);
+        std::cout << "Pack Correct Result ";
+        for(size_t i = 0; i < 4; ++i) 
+            std::cout << pt3[poly_modulus_degree / 4 * i] << " ";
+    }
+
+
+/*Verify the BaseDecomposition
     cout << "BD.t = " << gsw.BD.t << "\n";
     for(uint64_t tv = moduli[0].value() - 1024; tv < moduli[0].value(); ++tv)
     {
@@ -179,11 +203,12 @@ int main()
         }
         if(x != tv) cout << "wrong " << tv << "\n";
     }
+*/
 
 /*Verify GSW*/
+/*
     cout << "Verify GSW\n";
     vector<uint64_t> vec_ct;
-/*
     {
         gsw.encrypt_zero(vec_ct, true);
         gsw.decrypt(vec_ct, pt3);
@@ -205,14 +230,5 @@ int main()
         }
     }
 */
-    vector<uint64_t> plain_q(poly_modulus_degree * (context.first_context_data()->parms().coeff_modulus().size()));
-    plain_q[0] = 0xA1;
-    plain_q[1] = 0xB3;
-    gsw.encode(plain_q, vec_ct, true);
-    encryptor.encrypt(pt2, ct);
-    gsw.MultiplyBFV(vec_ct, ct, res_ct);
-    decryptor.decrypt(res_ct, pt3);
-    temp_s = pt3.to_string();
-    cout << "temp_s = " << temp_s << "\n";
     return 0;
 }

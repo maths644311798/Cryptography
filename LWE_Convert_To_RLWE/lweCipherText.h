@@ -9,23 +9,24 @@
 #include "utils.h"
 
 class LWECT {
-private:
-	seal::Plaintext ct1; // ct1
-	std::vector<uint64_t> ct0; // ct0, if modulus switch is applied, only one modulus is left
-	std::size_t poly_modulus_degree_{ 0 }; // length of every single polynomial
+public:
+	std::vector<uint64_t> ct0; 
+	std::vector<uint64_t> ct1; 
+	seal::parms_id_type parms_id_ = seal::parms_id_zero;
+	std::size_t poly_modulus_degree_{ 0 };
 
 public:
     // coeff_index represents the index to be extracted
 	LWECT() = default;
-    LWECT(const seal::Ciphertext& RLWECT, const std::size_t coeff_index,
-	const seal::SEALContext& context);
+    LWECT(const seal::SEALContext& context, const seal::Ciphertext& RLWECT, 
+	const std::size_t coeff_index = 0);
     // Some useful help functions
 	inline const std::size_t poly_modulus_degree() const { return poly_modulus_degree_; }
-	inline seal::parms_id_type parms_id() const { return ct1.parms_id(); }
-	inline const double scale() { return ct1.scale(); }
-	inline std::vector<uint64_t>& get_ct0() { return ct0; }
+	inline seal::parms_id_type& parms_id() { return parms_id_; }
+	inline const seal::parms_id_type& parms_id() const { return parms_id_; }
+	inline std::vector<uint64_t>& get_ct1() { return ct1; }
+	inline const std::vector<uint64_t>& get_ct1() const { return ct1; }
 	inline const std::vector<uint64_t>& get_ct0() const { return ct0; }
-	inline const seal::Plaintext& get_ct1() const { return ct1; }
 };
 
 void Prepare_Galois(const seal::SEALContext &context, seal::KeyGenerator &keygen, seal::GaloisKeys &galois_keys);
@@ -92,4 +93,14 @@ public:
 	void Reserve_Coefficients(const seal::SEALContext &context, seal::Ciphertext &c,
 							const seal::GaloisKeys &galois_keys) const;
 };
+
+/*
+The plaintext should be provided in both ntt form and non-ntt form
+@idx: the index of the coefficient to be extracted
+*/
+void BFV_multiply_plain_then_extract(const seal::SEALContext &context, 
+	seal::Ciphertext &ct, const seal::Plaintext &plain_non_ntt,
+	const seal::Plaintext &plain_ntt, size_t idx = 0,
+	seal::MemoryPoolHandle pool = seal::MemoryManager::GetPool());
+
 #endif
