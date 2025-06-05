@@ -174,11 +174,14 @@ int main()
 /*Verify LWE*/
     {
         encryptor.encrypt_symmetric(pt1, ct);
-        LWECT lwe_ct(context, ct, 0);
+        LWECT lwe_ct(context, ct, 0), lwe_ct2(context, ct, 1), res_lwe_ct(context_data_ptr);
         lweDecryptor lwe_decrytor(context, lwe_key);
         uint64_t res_pt = lwe_decrytor.Decrypt(lwe_ct);
         std::cout << "BFV ciphertext in NTT ? " << ct.is_ntt_form() << "\n";
         std::cout << "LWE Correct Result " << res_pt << '\n';
+        AddLWECT(context, lwe_ct, lwe_ct2, res_lwe_ct);
+        res_pt = lwe_decrytor.Decrypt(res_lwe_ct);
+        std::cout << "Add LWE Result " << res_pt << '\n';
     }
 
 /* Verify Pack */

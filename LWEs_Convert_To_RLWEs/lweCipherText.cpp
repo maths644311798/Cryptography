@@ -51,6 +51,27 @@ LWECT::LWECT(const seal::SEALContext& context, const seal::Ciphertext& RLWECT,
 	}
 }
 
+void AddLWECT(const seal::SEALContext& context, const LWECT &u, const LWECT &v, LWECT &res)
+{
+	std::size_t num_coeff = u.poly_modulus_degree(); 
+	auto context_data = context.get_context_data(u.parms_id());
+	const seal::EncryptionParameters& parms = context_data->parms(); 
+	const auto &moduli = parms.coeff_modulus();
+	size_t num_modulus = moduli.size();
+
+	res.poly_modulus_degree_ = num_coeff;
+	res.parms_id() = u.parms_id();
+	res.ct0.resize(num_modulus);
+	res.ct1.resize(num_modulus * num_coeff);
+	for(size_t i = 0; i < num_modulus; ++i)
+	{
+		res.ct0[i] = seal::util::add_uint_mod(u.ct0[i], v.ct0[i], moduli[i]);
+	}
+	seal::util::add_poly_coeffmod(seal::util::ConstRNSIter(u.ct1.data(), num_coeff),
+		seal::util::ConstRNSIter(v.ct1.data(), num_coeff), num_modulus, moduli.data(), 
+		seal::util::RNSIter(res.ct1.data(), num_coeff));
+}
+
 Packer::Packer(const seal::SEALContext &context, const size_t &n)
 : n_(n)
 {

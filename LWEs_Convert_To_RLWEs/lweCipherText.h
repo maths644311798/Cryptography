@@ -20,13 +20,15 @@ public:
     LWECT(const seal::SEALContext& context, const seal::Ciphertext& RLWECT, 
 	const std::size_t coeff_index = 0);
     // Some useful help functions
-	inline const std::size_t poly_modulus_degree() const { return poly_modulus_degree_; }
+	inline const std::size_t& poly_modulus_degree() const { return poly_modulus_degree_; }
 	inline seal::parms_id_type& parms_id() { return parms_id_; }
 	inline const seal::parms_id_type& parms_id() const { return parms_id_; }
 	inline std::vector<uint64_t>& get_ct1() { return ct1; }
 	inline const std::vector<uint64_t>& get_ct1() const { return ct1; }
 	inline const std::vector<uint64_t>& get_ct0() const { return ct0; }
 };
+
+void AddLWECT(const seal::SEALContext& context, const LWECT &u, const LWECT &v, LWECT &res);
 
 void Prepare_Galois(const seal::SEALContext &context, seal::KeyGenerator &keygen, seal::GaloisKeys &galois_keys);
 
