@@ -13,6 +13,7 @@
 
 using namespace std;
 using namespace seal;
+using namespace seal::util;
 #define PLAIN_MODULUS 1073153
 
 inline void print_parameters(const seal::SEALContext &context)
@@ -100,14 +101,13 @@ int main()
     size_t num_coeff = poly_modulus_degree;
     parms.set_poly_modulus_degree(poly_modulus_degree);
     parms.set_coeff_modulus(COEFF_MOD_ARR);
-    
     parms.set_plain_modulus(PLAIN_MODULUS);
     auto moduli = parms.coeff_modulus();
     size_t num_modulus = moduli.size();
     SEALContext context(parms,true, seal::sec_level_type::none);
     seal::MemoryPoolHandle pool =  seal::MemoryManager::GetPool();
-
     auto context_data_ptr = context.first_context_data();
+    auto ntt_tables = context_data_ptr->small_ntt_tables();
     auto galois_tool = context_data_ptr->galois_tool();
 
     print_parameters(context);
@@ -208,16 +208,31 @@ int main()
         seal::Plaintext pt_lift(pt1), plain_ntt(pt1);
         Plain_Lift_to_Rq(context_data_ptr, pt_lift);
         evaluator.transform_to_ntt_inplace(plain_ntt, context_data_ptr->parms_id(), pool);
-
-        timer.StopWatch();
-        LWECT lwe_ct =  BFV_multiply_plain_then_extract(context, ct, pt_lift, plain_ntt, 0, pool);
-        timer.StopWatch();
-
         lweDecryptor lwe_decrytor(context, lwe_key);
-        uint64_t res_pt = lwe_decrytor.Decrypt(lwe_ct);
+
+        //transform ct1 to ntt form
+	    std::vector<uint64_t> c1_ntt(ct.data(1), ct.data(1) + num_coeff * num_modulus);
+	    ntt_negacyclic_harvey(RNSIter(c1_ntt.data(), num_coeff), num_modulus, iter(ntt_tables));
+        timer.StopWatch();
+        LWECT lwe_ct =  BFV_multiply_plain_then_extract(context, ct.data(0), c1_ntt.data(), pt_lift, plain_ntt, 0, pool);
+        timer.StopWatch();
+        LWECT lwe_ct2 =  BFV_multiply_plain_then_extract(context, ct.data(0), c1_ntt.data(), pt_lift, plain_ntt, 0, pool);
+        timer.StopWatch();
+        LWECT res_lwe_ct;
+        AddLWECT(context, lwe_ct, lwe_ct2, res_lwe_ct);
+        timer.StopWatch();
+        inverse_ntt_lwe(context_data_ptr, res_lwe_ct);
+        timer.StopWatch();
+
+        uint64_t res_pt = lwe_decrytor.Decrypt(res_lwe_ct);
         std::cout << "BFV_multiply_plain_then_extract result " << res_pt << "\n";
+
     }
 
+/* */
+    {
+        
+    }
 
 /*Verify the BaseDecomposition
     cout << "BD.t = " << gsw.BD.t << "\n";
